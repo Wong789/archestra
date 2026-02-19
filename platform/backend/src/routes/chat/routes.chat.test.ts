@@ -28,6 +28,7 @@ vi.mock("@/models/api-key-model", () => ({
 import { createDirectLLMModel } from "@/clients/llm-client";
 import {
   buildTitlePrompt,
+  createToolInputThrottler,
   extractFirstMessages,
   generateConversationTitle,
 } from "./routes.chat";
@@ -362,5 +363,168 @@ describe("title generation integration", () => {
     expect(prompt).toContain(
       "Assistant: I can help you debug that. What error are you seeing?",
     );
+  });
+});
+
+// ── createToolInputThrottler ─────────────────────────────────────────────────
+
+/** Helper: pipe an array of parts through a throttler and collect the output.
+ *  Write and read concurrently to avoid backpressure deadlock — the async
+ *  transform handler can suspend (sleep) which blocks the write side. */
+async function pipeThrough(
+  parts: unknown[],
+  options?: { chunkSize?: number; delayMs?: number },
+): Promise<unknown[]> {
+  const throttler = createToolInputThrottler(options);
+  const reader = throttler.readable.getReader();
+  const writer = throttler.writable.getWriter();
+
+  // Write in background — don't await before starting the reader
+  const writePromise = (async () => {
+    for (const part of parts) {
+      await writer.write(part);
+    }
+    await writer.close();
+  })();
+
+  // Drain all output concurrently
+  const output: unknown[] = [];
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    output.push(value);
+  }
+
+  await writePromise;
+  return output;
+}
+
+describe("createToolInputThrottler", () => {
+  it("passes non-tool-input-delta events through unchanged", async () => {
+    const parts = [
+      { type: "text-delta", textDelta: "hello" },
+      { type: "tool-input-start", toolCallId: "tc1", toolName: "foo" },
+      { type: "finish", finishReason: "stop" },
+    ];
+
+    const output = await pipeThrough(parts, { delayMs: 0 });
+
+    expect(output).toEqual(parts);
+  });
+
+  it("passes small tool-input-delta events through without splitting", async () => {
+    const parts = [
+      {
+        type: "tool-input-delta",
+        toolCallId: "tc1",
+        inputTextDelta: "small",
+      },
+    ];
+
+    const output = await pipeThrough(parts, { chunkSize: 30, delayMs: 0 });
+
+    expect(output).toHaveLength(1);
+    expect(output[0]).toEqual({
+      type: "tool-input-delta",
+      toolCallId: "tc1",
+      inputTextDelta: "small",
+    });
+  });
+
+  it("splits large tool-input-delta into chunks of chunkSize", async () => {
+    // 10 chars with chunkSize=3 → 4 chunks (3+3+3+1)
+    const parts = [
+      {
+        type: "tool-input-delta",
+        toolCallId: "tc1",
+        inputTextDelta: "0123456789",
+      },
+    ];
+
+    const output = await pipeThrough(parts, { chunkSize: 3, delayMs: 0 });
+
+    expect(output).toHaveLength(4);
+    const deltas = (output as Array<{ inputTextDelta: string }>).map(
+      (p) => p.inputTextDelta,
+    );
+    expect(deltas).toEqual(["012", "345", "678", "9"]);
+  });
+
+  it("preserves extra properties on the part object", async () => {
+    const parts = [
+      {
+        type: "tool-input-delta",
+        toolCallId: "tc1",
+        inputTextDelta: "hi",
+        extra: 42,
+      },
+    ];
+
+    const output = await pipeThrough(parts, { chunkSize: 30, delayMs: 0 });
+
+    expect(output).toHaveLength(1);
+    expect(output[0]).toMatchObject({
+      type: "tool-input-delta",
+      toolCallId: "tc1",
+      extra: 42,
+    });
+  });
+
+  it("passes through tool-input-delta events with no inputTextDelta", async () => {
+    const parts = [
+      { type: "tool-input-delta", toolCallId: "tc1", inputTextDelta: "" },
+    ];
+
+    const output = await pipeThrough(parts, { delayMs: 0 });
+
+    // Empty inputTextDelta is falsy → passes through unchanged
+    expect(output).toEqual(parts);
+  });
+
+  it("handles multiple tool call IDs independently", async () => {
+    const parts = [
+      {
+        type: "tool-input-delta",
+        toolCallId: "tc1",
+        inputTextDelta: "AAABBB",
+      },
+      {
+        type: "tool-input-delta",
+        toolCallId: "tc2",
+        inputTextDelta: "XY",
+      },
+    ];
+
+    const output = await pipeThrough(parts, { chunkSize: 3, delayMs: 0 });
+
+    // tc1 splits into 2 chunks, tc2 stays as 1
+    expect(output).toHaveLength(3);
+    const tc1Chunks = (
+      output as Array<{ toolCallId: string; inputTextDelta: string }>
+    )
+      .filter((p) => p.toolCallId === "tc1")
+      .map((p) => p.inputTextDelta);
+    const tc2Chunks = (
+      output as Array<{ toolCallId: string; inputTextDelta: string }>
+    )
+      .filter((p) => p.toolCallId === "tc2")
+      .map((p) => p.inputTextDelta);
+    expect(tc1Chunks).toEqual(["AAA", "BBB"]);
+    expect(tc2Chunks).toEqual(["XY"]);
+  });
+
+  it("enforces minimum delay between emits for the same tool call", async () => {
+    const delayMs = 50;
+    const parts = [
+      { type: "tool-input-delta", toolCallId: "tc1", inputTextDelta: "A" },
+      { type: "tool-input-delta", toolCallId: "tc1", inputTextDelta: "B" },
+    ];
+
+    const start = Date.now();
+    await pipeThrough(parts, { chunkSize: 30, delayMs });
+    const elapsed = Date.now() - start;
+
+    // Second emit must wait at least delayMs after the first
+    expect(elapsed).toBeGreaterThanOrEqual(delayMs - 5); // 5ms tolerance
   });
 });

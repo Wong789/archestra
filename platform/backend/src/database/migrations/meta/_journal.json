@@ -1107,6 +1107,13 @@
       "when": 1771955000000,
       "tag": "0157_unassign_chat_assistant_from_default_team",
       "breakpoints": true
+    },
+    {
+      "idx": 158,
+      "version": "7",
+      "when": 1772026801193,
+      "tag": "0158_violet_mole_man",
+      "breakpoints": true
     }
   ]
 }

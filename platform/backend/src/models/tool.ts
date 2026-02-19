@@ -269,6 +269,7 @@ class ToolModel {
         createdAt: schema.toolsTable.createdAt,
         updatedAt: schema.toolsTable.updatedAt,
         delegateToAgentId: schema.toolsTable.delegateToAgentId,
+        meta: schema.toolsTable.meta,
         policiesAutoConfiguredAt: schema.toolsTable.policiesAutoConfiguredAt,
         policiesAutoConfiguringStartedAt:
           schema.toolsTable.policiesAutoConfiguringStartedAt,
@@ -409,6 +410,7 @@ class ToolModel {
       description: string | null;
       parameters: Record<string, unknown>;
       catalogId: string;
+      meta?: Record<string, unknown>;
     }>,
   ): Promise<Tool[]> {
     if (tools.length === 0) {
@@ -460,6 +462,7 @@ class ToolModel {
           name: tool.name,
           description: tool.description,
           parameters: tool.parameters,
+          meta: tool.meta,
           catalogId: tool.catalogId,
           agentId: null,
         });
@@ -740,6 +743,63 @@ class ToolModel {
   }
 
   /**
+   * Find an agent-assigned MCP tool by its unprefixed name suffix.
+   * Matches tools where name ends with "__<toolNameSuffix>".
+   * Used when MCP App iframes call oncalltool with the raw tool name
+   * (without the server prefix), e.g. "refresh-stats" → "system__refresh-stats".
+   */
+  static async getMcpToolsAssignedToAgentBySuffix(
+    toolNameSuffix: string,
+    agentId: string,
+  ) {
+    // Use an exact suffix match via RIGHT() to avoid LIKE pattern injection.
+    // The suffix is the separator + raw tool name, e.g. "__refresh-stats".
+    const suffix = `${MCP_SERVER_TOOL_NAME_SEPARATOR}${toolNameSuffix}`;
+
+    const mcpTools = await db
+      .select({
+        toolName: schema.toolsTable.name,
+        responseModifierTemplate:
+          schema.agentToolsTable.responseModifierTemplate,
+        mcpServerSecretId: schema.mcpServersTable.secretId,
+        mcpServerName: schema.mcpServersTable.name,
+        mcpServerCatalogId: schema.mcpServersTable.catalogId,
+        credentialSourceMcpServerId:
+          schema.agentToolsTable.credentialSourceMcpServerId,
+        executionSourceMcpServerId:
+          schema.agentToolsTable.executionSourceMcpServerId,
+        useDynamicTeamCredential:
+          schema.agentToolsTable.useDynamicTeamCredential,
+        mcpServerId: schema.mcpServersTable.id,
+        catalogId: schema.toolsTable.catalogId,
+        catalogName: schema.internalMcpCatalogTable.name,
+      })
+      .from(schema.toolsTable)
+      .innerJoin(
+        schema.agentToolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .leftJoin(
+        schema.mcpServersTable,
+        eq(schema.toolsTable.mcpServerId, schema.mcpServersTable.id),
+      )
+      .leftJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.toolsTable.catalogId, schema.internalMcpCatalogTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agentId),
+          sql`RIGHT(${schema.toolsTable.name}, ${suffix.length}) = ${suffix}`,
+          isNotNull(schema.toolsTable.catalogId),
+        ),
+      )
+      .limit(1);
+
+    return mcpTools;
+  }
+
+  /**
    * Get all tools for a specific catalog item with their assignment counts and assigned agents
    * Used to show tools across all installations of the same catalog item
    */
@@ -898,6 +958,7 @@ class ToolModel {
       catalogId: string;
       /** The original tool name from the MCP server (e.g., "generate_text") */
       rawToolName?: string;
+      meta?: Record<string, unknown>;
     }>,
   ): Promise<{
     created: Tool[];
@@ -1023,8 +1084,16 @@ class ToolModel {
         const parametersChanged =
           JSON.stringify(existingTool.parameters) !==
           JSON.stringify(tool.parameters);
+        const metaChanged =
+          JSON.stringify(existingTool.meta ?? null) !==
+          JSON.stringify(tool.meta ?? null);
 
-        if (nameChanged || descriptionChanged || parametersChanged) {
+        if (
+          nameChanged ||
+          descriptionChanged ||
+          parametersChanged ||
+          metaChanged
+        ) {
           // Update existing tool (including rename if catalog name changed)
           const [updatedTool] = await db
             .update(schema.toolsTable)
@@ -1032,6 +1101,7 @@ class ToolModel {
               name: tool.name, // This handles renaming when catalog name changes
               description: tool.description,
               parameters: tool.parameters,
+              meta: tool.meta,
               updatedAt: new Date(),
             })
             .where(eq(schema.toolsTable.id, existingTool.id))
@@ -1049,6 +1119,7 @@ class ToolModel {
           name: tool.name,
           description: tool.description,
           parameters: tool.parameters,
+          meta: tool.meta,
           catalogId: tool.catalogId,
           agentId: null,
         });
@@ -1367,6 +1438,49 @@ class ToolModel {
       .limit(1);
 
     return tool || null;
+  }
+
+  /**
+   * Find tools assigned to an agent that have a matching ui/resourceUri in their meta.
+   */
+  static async findToolsByUiResourceUri(
+    agentId: string,
+    resourceUri: string,
+  ): Promise<
+    Array<{
+      tool: Tool;
+      catalogId: string | null;
+    }>
+  > {
+    const assignedToolIds = await AgentToolModel.findToolIdsByAgent(agentId);
+    if (assignedToolIds.length === 0) {
+      return [];
+    }
+
+    // Push the JSON filter into Postgres to avoid fetching all tools into memory.
+    // Checks both the canonical path (_meta.ui.resourceUri) and the deprecated
+    // flat key (_meta."ui/resourceUri") for backwards compatibility.
+    const matchingTools = await db
+      .select()
+      .from(schema.toolsTable)
+      .where(
+        and(
+          inArray(schema.toolsTable.id, assignedToolIds),
+          or(
+            isNotNull(schema.toolsTable.catalogId),
+            isNotNull(schema.toolsTable.delegateToAgentId),
+          ),
+          or(
+            sql`${schema.toolsTable.meta}->'_meta'->'ui'->>'resourceUri' = ${resourceUri}`,
+            sql`${schema.toolsTable.meta}->'_meta'->>'ui/resourceUri' = ${resourceUri}`,
+          ),
+        ),
+      );
+
+    return matchingTools.map((tool) => ({
+      tool,
+      catalogId: tool.catalogId,
+    }));
   }
 
   /**

@@ -7,7 +7,7 @@ import {
 
 describe("applyResponseModifierTemplate", () => {
   test("renders basic text template", () => {
-    const content = [{ type: "text", text: "Hello World" }];
+    const content = [{ type: "text" as const, text: "Hello World" }];
     const template = 'Modified: {{lookup (lookup response 0) "text"}}';
 
     const result = applyResponseModifierTemplate(template, content);
@@ -16,7 +16,7 @@ describe("applyResponseModifierTemplate", () => {
   });
 
   test("renders JSON template and parses result", () => {
-    const content = [{ type: "text", text: "test data" }];
+    const content = [{ type: "text" as const, text: "test data" }];
     const template =
       '{"formatted": true, "data": "{{lookup (lookup response 0) "text"}}"}';
 
@@ -28,7 +28,7 @@ describe("applyResponseModifierTemplate", () => {
   test("accesses nested properties in response data with 'with' helper", () => {
     const content = [
       {
-        type: "resource",
+        type: "resource" as const,
         resource: {
           uri: "file:///test.txt",
           mimeType: "text/plain",
@@ -47,7 +47,7 @@ describe("applyResponseModifierTemplate", () => {
   test("uses json helper to stringify objects", () => {
     const content = [
       {
-        type: "text",
+        type: "text" as const,
         text: "data",
       },
     ];
@@ -66,7 +66,7 @@ describe("applyResponseModifierTemplate", () => {
     // Realistic GitHub MCP server response format
     const content = [
       {
-        type: "text",
+        type: "text" as const,
         text: '{"issues":[{"id":816,"title":"Add authentication for MCP gateways"},{"id":815,"title":"ERROR: role \\"postgres\\" already exists"}]}',
       },
     ];
@@ -89,7 +89,7 @@ describe("applyResponseModifierTemplate", () => {
   test("transforms GitHub issues data to id:title mapping using json helper", () => {
     const content = [
       {
-        type: "text",
+        type: "text" as const,
         text: '{"issues":[{"id":3550499726,"number":816,"state":"OPEN","title":"Add authentication for MCP gateways"},{"id":3550391199,"number":815,"state":"OPEN","title":"ERROR: role \\"postgres\\" already exists"},{"id":3545318824,"number":805,"state":"OPEN","title":"Bug: if I rename default agent, it gets re-created"}]}',
       },
     ];
@@ -114,7 +114,7 @@ describe("applyResponseModifierTemplate", () => {
   });
 
   test("returns original content when template produces invalid JSON", () => {
-    const content = [{ type: "text", text: "test" }];
+    const content = [{ type: "text" as const, text: "test" }];
     const template = 'This is not JSON: {{lookup (lookup response 0) "text"}}';
 
     const result = applyResponseModifierTemplate(template, content);
@@ -124,7 +124,7 @@ describe("applyResponseModifierTemplate", () => {
   });
 
   test("returns original content when template fails to compile", () => {
-    const content = [{ type: "text", text: "test" }];
+    const content = [{ type: "text" as const, text: "test" }];
     const template = "{{#invalid}}"; // Invalid Handlebars syntax
 
     const result = applyResponseModifierTemplate(template, content);
@@ -135,8 +135,8 @@ describe("applyResponseModifierTemplate", () => {
 
   test("handles multiple content blocks using with helpers", () => {
     const content = [
-      { type: "text", text: "Line 1" },
-      { type: "text", text: "Line 2" },
+      { type: "text" as const, text: "Line 1" },
+      { type: "text" as const, text: "Line 2" },
     ];
     const template =
       '{{#with (lookup response 0)}}{{#with (lookup ../response 1)}}{"first": "{{../this.text}}", "second": "{{this.text}}"}{{/with}}{{/with}}';

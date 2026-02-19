@@ -1,6 +1,6 @@
-import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import type { ContentBlock } from "@modelcontextprotocol/sdk/types.js";
 import Handlebars from "handlebars";
-import type { CommonToolResult } from "@/types";
+
 
 /**
  * Register custom Handlebars helpers for template rendering
@@ -216,10 +216,8 @@ export function extractGroupsWithTemplate(
  */
 export function applyResponseModifierTemplate(
   templateString: string,
-  toolCallResponseResultContent: Awaited<
-    ReturnType<typeof Client.prototype.callTool>
-  >["content"],
-): CommonToolResult["content"] {
+  toolCallResponseResultContent: ContentBlock[],
+): ContentBlock[] {
   try {
     const template = Handlebars.compile(templateString);
 
