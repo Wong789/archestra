@@ -15,6 +15,7 @@ import {
   RefreshCw,
   Trash2,
   User,
+  Users,
   Wrench,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -51,7 +52,6 @@ import { InstallationProgress } from "./installation-progress";
 import { ManageUsersDialog } from "./manage-users-dialog";
 import { McpAssignmentsDialog } from "./mcp-assignments-dialog";
 import { McpLogsDialog } from "./mcp-logs-dialog";
-import { TransportBadges } from "./transport-badges";
 import { UninstallServerDialog } from "./uninstall-server-dialog";
 import { YamlConfigDialog } from "./yaml-config-dialog";
 
@@ -832,25 +832,39 @@ export function McpServerCard({
                   Built-in
                 </Badge>
               )}
-              {item.oauthConfig && (
-                <Badge variant="secondary" className="text-xs">
-                  OAuth
-                </Badge>
-              )}
-              {!isBuiltinVariant && (
-                <TransportBadges
-                  isRemote={isRemoteVariant}
-                  transportType={item.localConfig?.transportType}
-                />
-              )}
-              {isRemoteVariant && !requiresAuth && (
-                <Badge
-                  variant="secondary"
-                  className="text-xs bg-green-700 text-white"
-                >
-                  No auth required
-                </Badge>
-              )}
+              <Badge
+                variant="outline"
+                className={`text-xs text-white ${isRemoteVariant ? "bg-blue-700" : "bg-emerald-700"}`}
+              >
+                {isRemoteVariant ? "Remote" : "Local"}
+              </Badge>
+              {(() => {
+                const itemScope = (item as Record<string, unknown>).scope as
+                  | string
+                  | undefined;
+                const itemTeams = (item as Record<string, unknown>).teams as
+                  | Array<{ id: string; name: string }>
+                  | undefined;
+                if (itemScope === "personal") {
+                  return (
+                    <Badge variant="outline" className="text-xs gap-1">
+                      <User className="h-3 w-3" />
+                      Personal
+                    </Badge>
+                  );
+                }
+                if (itemScope === "team" && itemTeams && itemTeams.length > 0) {
+                  return (
+                    <Badge variant="outline" className="text-xs gap-1">
+                      <Users className="h-3 w-3" />
+                      {itemTeams.length === 1
+                        ? itemTeams[0].name
+                        : `${itemTeams.length} teams`}
+                    </Badge>
+                  );
+                }
+                return null;
+              })()}
               {item.labels && item.labels.length > 0 && (
                 <LabelTags labels={item.labels} />
               )}

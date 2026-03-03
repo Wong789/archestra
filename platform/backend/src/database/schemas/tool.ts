@@ -62,16 +62,11 @@ const toolsTable = pgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    // Unique constraint ensures:
-    // - For MCP tools: one tool per (catalogId, name) combination
-    // - For proxy-sniffed tools: one tool per (agentId, name) combination
-    // - For delegation tools: one tool per delegateToAgentId
-    unique().on(
-      table.catalogId,
-      table.name,
-      table.agentId,
-      table.delegateToAgentId,
-    ),
+    // Global tool name uniqueness — required by LLM providers per session
+    // and by policy lookups (WHERE tools.name = ?)
+    unique("tools_name_unique").on(table.name),
+    // One delegation tool per target agent (NULLs are distinct in PG unique constraints)
+    unique("tools_delegate_to_agent_id_unique").on(table.delegateToAgentId),
     // Index for delegation tool lookups
     index("tools_delegate_to_agent_id_idx").on(table.delegateToAgentId),
   ],

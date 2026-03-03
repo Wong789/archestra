@@ -2022,4 +2022,26 @@ describe("ToolModel", () => {
       expect(ids1).toEqual(ids2);
     });
   });
+
+  describe("uniqueness constraints", () => {
+    test("createToolIfNotExists returns existing tool for duplicate name", async ({
+      makeTool,
+    }) => {
+      const tool = await makeTool();
+
+      const second = await ToolModel.createToolIfNotExists({
+        name: tool.name,
+        parameters: {},
+      });
+
+      expect(second.id).toBe(tool.id);
+    });
+
+    test("different names can coexist", async ({ makeTool }) => {
+      const toolA = await makeTool();
+      const toolB = await makeTool();
+
+      expect(toolA.id).not.toBe(toolB.id);
+    });
+  });
 });

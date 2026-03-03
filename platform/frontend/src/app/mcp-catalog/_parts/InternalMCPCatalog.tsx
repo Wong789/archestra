@@ -152,8 +152,8 @@ export function InternalMCPCatalog({
   const [autoOpenAssignmentsCatalogId, setAutoOpenAssignmentsCatalogId] =
     useState<string | null>(null);
 
-  const { data: userIsMcpServerAdmin } = useHasPermissions({
-    mcpServer: ["admin"],
+  const { data: canCreateCatalogItem } = useHasPermissions({
+    internalMcpCatalog: ["create"],
   });
 
   const queryClient = useQueryClient();
@@ -788,14 +788,14 @@ export function InternalMCPCatalog({
         <div className="flex flex-col gap-3 sm:flex-row">
           <Button
             onClick={() =>
-              userIsMcpServerAdmin
+              canCreateCatalogItem
                 ? openDialog("create")
                 : openDialog("custom-request")
             }
             className="bg-linear-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
           >
             <Plus className="mr-0.5 h-4 w-4" />
-            {userIsMcpServerAdmin
+            {canCreateCatalogItem
               ? "Add MCP Server to the Registry"
               : "Request Custom MCP"}
           </Button>

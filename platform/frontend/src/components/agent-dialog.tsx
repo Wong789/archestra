@@ -13,7 +13,6 @@ import {
   Bot,
   Building2,
   CheckIcon,
-  ChevronDown,
   Globe,
   Key,
   Loader2,
@@ -25,6 +24,7 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { AccessLevelSelector } from "@/components/access-level-selector";
 import {
   type ProfileLabel,
   ProfileLabels,
@@ -61,7 +61,6 @@ import {
 import { ExpandableText } from "@/components/ui/expandable-text";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import {
   Popover,
   PopoverContent,
@@ -76,12 +75,6 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import {
   useCreateProfile,
   useInternalAgents,
@@ -334,31 +327,8 @@ const agentTypeDisplayName: Record<string, string> = {
   profile: "profile",
 };
 
-function getScopeOptions(agentType: string) {
-  const name = agentTypeDisplayName[agentType] || "agent";
-  return [
-    {
-      value: "personal" as const,
-      label: "Personal",
-      description: `Only you can access this ${name}`,
-      icon: User,
-    },
-    {
-      value: "team" as const,
-      label: "Teams",
-      description: `Share ${name} with selected teams`,
-      icon: Users,
-    },
-    {
-      value: "org" as const,
-      label: "Organization",
-      description: `Anyone in your org can access this ${name}`,
-      icon: Globe,
-    },
-  ];
-}
-
-function AccessLevelSelector({
+// Re-exported from shared component, wrapped to maintain agent-dialog API compatibility
+function AgentAccessLevelSelector({
   scope,
   onScopeChange,
   isAdmin,
@@ -368,7 +338,6 @@ function AccessLevelSelector({
   assignedTeamIds,
   onTeamIdsChange,
   hasNoAvailableTeams,
-  showTeamRequired,
 }: {
   scope: "personal" | "team" | "org";
   onScopeChange: (scope: "personal" | "team" | "org") => void;
@@ -379,167 +348,19 @@ function AccessLevelSelector({
   assignedTeamIds: string[];
   onTeamIdsChange: (ids: string[]) => void;
   hasNoAvailableTeams: boolean;
-  showTeamRequired: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const scopeOptions = getScopeOptions(agentType);
-  const selected =
-    scopeOptions.find((o) => o.value === scope) ?? scopeOptions[0];
-
-  const isOptionDisabled = (value: string) => {
-    if (value === "personal" && initialScope && initialScope !== "personal")
-      return true;
-    if (value === "team" && !isAdmin) return true;
-    if (value === "org" && !isAdmin) return true;
-    return false;
-  };
-
-  const resourceForPermission: Record<string, string> = {
-    agent: "agent:admin",
-    mcp_gateway: "mcpGateway:admin",
-    llm_proxy: "llmProxy:admin",
-    profile: "agent:admin",
-  };
-  const requiredPermission = resourceForPermission[agentType] || "admin";
-
-  const getDisabledReason = (value: string) => {
-    if (value === "personal" && initialScope && initialScope !== "personal")
-      return "Shared agents cannot be made personal";
-    if (value === "team" && !isAdmin)
-      return `You need ${requiredPermission} permission to share with teams`;
-    if (value === "org" && !isAdmin)
-      return `You need ${requiredPermission} permission to make this available org-wide`;
-    return "";
-  };
-
   return (
-    <div className="space-y-4">
-      {/* ACCESS LEVEL */}
-      <div className="space-y-2">
-        <Label>
-          Who can use this {agentTypeDisplayName[agentType] || "agent"}
-        </Label>
-
-        {expanded ? (
-          <div className="space-y-1.5">
-            {scopeOptions.map((option) => {
-              const Icon = option.icon;
-              const disabled = isOptionDisabled(option.value);
-              const isSelected = scope === option.value;
-              return (
-                <TooltipProvider key={option.value}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => {
-                          if (!disabled) {
-                            onScopeChange(option.value);
-                            setExpanded(false);
-                          }
-                        }}
-                        className={`w-full flex items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
-                          isSelected
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : disabled
-                              ? "opacity-50 cursor-not-allowed"
-                              : "hover:bg-muted/50 cursor-pointer"
-                        }`}
-                      >
-                        <div
-                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
-                            isSelected ? "bg-primary-foreground/20" : "bg-muted"
-                          }`}
-                        >
-                          <Icon className="h-4 w-4" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium">
-                            {option.label}
-                          </div>
-                          <div
-                            className={`text-xs ${
-                              isSelected
-                                ? "text-primary-foreground/70"
-                                : "text-muted-foreground"
-                            }`}
-                          >
-                            {option.description}
-                          </div>
-                        </div>
-                        <div
-                          className={`h-4 w-4 shrink-0 rounded-full border-2 flex items-center justify-center ${
-                            isSelected
-                              ? "border-primary-foreground"
-                              : "border-muted-foreground/30"
-                          }`}
-                        >
-                          {isSelected && <CheckIcon className="h-2.5 w-2.5" />}
-                        </div>
-                      </button>
-                    </TooltipTrigger>
-                    {disabled && (
-                      <TooltipContent>
-                        {getDisabledReason(option.value)}
-                      </TooltipContent>
-                    )}
-                  </Tooltip>
-                </TooltipProvider>
-              );
-            })}
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setExpanded(true)}
-            className="w-full flex items-center gap-3 rounded-lg border p-3 text-left hover:bg-muted/50 transition-colors cursor-pointer"
-          >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
-              <selected.icon className="h-4 w-4" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium">{selected.label}</div>
-              <div className="text-xs text-muted-foreground">
-                {selected.description}
-              </div>
-            </div>
-            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-          </button>
-        )}
-      </div>
-
-      {/* SHARE WITH — only shown for team-scoped */}
-      {scope === "team" && (
-        <div className="space-y-2">
-          <Label>
-            Teams
-            {showTeamRequired && (
-              <span className="text-destructive ml-1">(required)</span>
-            )}
-          </Label>
-          <MultiSelectCombobox
-            disabled={!isAdmin}
-            options={
-              teams?.map((team) => ({
-                value: team.id,
-                label: team.name,
-              })) || []
-            }
-            value={assignedTeamIds}
-            onChange={onTeamIdsChange}
-            placeholder={
-              hasNoAvailableTeams
-                ? "No teams available"
-                : assignedTeamIds.length === 0
-                  ? "Search teams..."
-                  : "Search teams..."
-            }
-            emptyMessage="No teams found."
-          />
-        </div>
-      )}
-    </div>
+    <AccessLevelSelector
+      scope={scope}
+      onScopeChange={onScopeChange}
+      isAdmin={isAdmin}
+      initialScope={initialScope}
+      resourceLabel={agentTypeDisplayName[agentType] || "agent"}
+      teams={teams}
+      assignedTeamIds={assignedTeamIds}
+      onTeamIdsChange={onTeamIdsChange}
+      hasNoAvailableTeams={hasNoAvailableTeams}
+    />
   );
 }
 
@@ -1153,7 +974,7 @@ export function AgentDialog({
 
               {/* Visibility / Scope */}
               {!isBuiltIn && (
-                <AccessLevelSelector
+                <AgentAccessLevelSelector
                   scope={scope}
                   onScopeChange={(newScope) => {
                     setScope(newScope);
@@ -1175,7 +996,6 @@ export function AgentDialog({
                   assignedTeamIds={assignedTeamIds}
                   onTeamIdsChange={setAssignedTeamIds}
                   hasNoAvailableTeams={hasNoAvailableTeams}
-                  showTeamRequired={!isAdmin && !isInternalAgent}
                 />
               )}
 

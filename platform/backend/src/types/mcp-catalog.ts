@@ -87,6 +87,14 @@ const CatalogLabelSchema = z.object({
   value: z.string().min(1),
 });
 
+export const McpCatalogScopeSchema = z.enum(["personal", "team", "org"]);
+export type McpCatalogScope = z.infer<typeof McpCatalogScopeSchema>;
+
+const CatalogTeamSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+
 export const SelectInternalMcpCatalogSchema = createSelectSchema(
   schema.internalMcpCatalogTable,
 ).extend({
@@ -97,6 +105,10 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
   localConfig: LocalConfigSelectSchema.nullable(),
   // Labels are loaded from the junction table, not from the DB row
   labels: z.array(CatalogLabelSchema).default([]),
+  // Teams are loaded from the junction table, not from the DB row
+  teams: z.array(CatalogTeamSchema).default([]),
+  // Author name is loaded from the users table
+  authorName: z.string().nullable().optional(),
 });
 
 export const InsertInternalMcpCatalogSchema = createInsertSchema(
@@ -116,6 +128,9 @@ export const InsertInternalMcpCatalogSchema = createInsertSchema(
     localConfig: LocalConfigSchema.nullable().optional(),
     // Labels are synced separately via McpCatalogLabelModel
     labels: z.array(CatalogLabelSchema).optional(),
+    // Scope and teams for access control
+    scope: McpCatalogScopeSchema.optional(),
+    teams: z.array(z.string()).optional(),
   })
   .omit({
     createdAt: true,
@@ -137,11 +152,15 @@ export const UpdateInternalMcpCatalogSchema = createUpdateSchema(
     localConfig: LocalConfigSchema.nullable().optional(),
     // Labels are synced separately via McpCatalogLabelModel
     labels: z.array(CatalogLabelSchema).optional(),
+    // Scope and teams for access control
+    scope: McpCatalogScopeSchema.optional(),
+    teams: z.array(z.string()).optional(),
   })
   .omit({
     id: true,
     createdAt: true,
     updatedAt: true,
+    authorId: true,
   });
 
 export type InternalMcpCatalogServerType = z.infer<

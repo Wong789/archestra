@@ -6,13 +6,29 @@ import {
   E2eTestId,
 } from "@shared";
 
-import { BookOpen, Github, Info, Loader2, Search } from "lucide-react";
+import {
+  ArrowRight,
+  BookOpen,
+  Github,
+  Info,
+  Loader2,
+  Search,
+  Sparkles,
+} from "lucide-react";
 import { useMemo, useState } from "react";
+import { AccessLevelSelector } from "@/components/access-level-selector";
 import { DebouncedInput } from "@/components/debounced-input";
 import { TruncatedText } from "@/components/truncated-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -29,7 +45,9 @@ import {
 import {
   useCreateInternalMcpCatalogItem,
   useInternalMcpCatalog,
+  useUpdateInternalMcpCatalogItem,
 } from "@/lib/internal-mcp-catalog.query";
+import { useTeams } from "@/lib/team.query";
 import type { SelectedCategory } from "./CatalogFilters";
 import { DetailsDialog } from "./details-dialog";
 import { parseDockerArgsToLocalConfig } from "./docker-args-parser";
@@ -68,12 +86,28 @@ export function ArchestraCatalogTab({
     initialData: initialCatalogItems,
   });
 
+  // Scope selection dialog state
+  const [pendingServer, setPendingServer] =
+    useState<archestraCatalogTypes.ArchestraMcpServerManifest | null>(null);
+  const [selectedScope, setSelectedScope] = useState<
+    "personal" | "team" | "org"
+  >("org");
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
+
   // Fetch available categories
   const { data: availableCategories = [] } = useMcpServerCategories();
 
-  const { data: userIsMcpServerAdmin = false } = useHasPermissions({
-    mcpServer: ["admin"],
+  // Permissions for scope selector
+  const { data: canCreateCatalogItem = false } = useHasPermissions({
+    internalMcpCatalog: ["create"],
   });
+  const { data: isAdmin } = useHasPermissions({
+    internalMcpCatalog: ["admin"],
+  });
+  const { data: isTeamAdmin } = useHasPermissions({
+    internalMcpCatalog: ["team-admin"],
+  });
+  const { data: teams } = useTeams();
 
   // Use server-side search and category filtering
   const {
@@ -309,6 +343,8 @@ export function ArchestraCatalogTab({
       localConfig,
       userConfig: server.user_config,
       oauthConfig: rewrittenOauth,
+      scope: selectedScope,
+      teams: selectedScope === "team" ? selectedTeamIds : undefined,
     });
 
     // Close the dialog after adding
@@ -345,11 +381,16 @@ export function ArchestraCatalogTab({
     return filtered;
   }, [servers, filters.type]);
 
-  // Create a Set of catalog item names for efficient lookup
-  const catalogServerNames = useMemo(
-    () => new Set(catalogItems?.map((item) => item.name) || []),
-    [catalogItems],
-  );
+  // Create a Map from name to array of catalog items for scope-aware lookup
+  const catalogItemsByName = useMemo(() => {
+    const map = new Map<string, CatalogItem[]>();
+    for (const item of catalogItems ?? []) {
+      const existing = map.get(item.name) ?? [];
+      existing.push(item);
+      map.set(item.name, existing);
+    }
+    return map;
+  }, [catalogItems]);
 
   return (
     <div className="w-full space-y-2 mt-4">
@@ -466,12 +507,51 @@ export function ArchestraCatalogTab({
                   <ServerCard
                     key={`${server.name}-${index}`}
                     server={server}
-                    onAddToCatalog={handleAddToCatalog}
+                    onAddToCatalog={(s) => {
+                      const existing = catalogItemsByName.get(s.name) ?? [];
+                      const hasPersonal = existing.some(
+                        (i) => i.scope === "personal",
+                      );
+                      const hasOrg = existing.some((i) => i.scope === "org");
+                      const coveredTeamIds = new Set(
+                        existing
+                          .filter((i) => i.scope === "team")
+                          .flatMap((i) => i.teams?.map((t) => t.id) ?? []),
+                      );
+                      // Pick first available scope: org > team > personal
+                      let defaultScope: "personal" | "team" | "org" = isAdmin
+                        ? "org"
+                        : isTeamAdmin
+                          ? "team"
+                          : "personal";
+                      const availableTeams = (teams ?? []).filter(
+                        (t) => !coveredTeamIds.has(t.id),
+                      );
+                      if (defaultScope === "org" && hasOrg)
+                        defaultScope =
+                          availableTeams.length > 0 ? "team" : "personal";
+                      if (
+                        defaultScope === "team" &&
+                        availableTeams.length === 0
+                      )
+                        defaultScope = "personal";
+                      if (defaultScope === "personal" && hasPersonal)
+                        defaultScope = hasOrg ? "team" : "org";
+
+                      setSelectedScope(defaultScope);
+                      setSelectedTeamIds([]);
+                      setPendingServer(s);
+                    }}
                     onRequestInstallation={handleRequestInstallation}
                     isAdding={createMutation.isPending}
                     onOpenReadme={setReadmeServer}
-                    isInCatalog={catalogServerNames.has(server.name)}
-                    userIsMcpServerAdmin={userIsMcpServerAdmin}
+                    existingCatalogItems={
+                      catalogItemsByName.get(server.name) ?? []
+                    }
+                    teams={teams}
+                    canCreateCatalogItem={canCreateCatalogItem}
+                    isAdmin={!!isAdmin}
+                    isTeamAdmin={!!isTeamAdmin}
                   />
                 ))}
               </div>
@@ -509,6 +589,39 @@ export function ArchestraCatalogTab({
         server={requestServer}
         onClose={() => setRequestServer(null)}
       />
+
+      <ScopeDialog
+        pendingServer={pendingServer}
+        onClose={() => {
+          setPendingServer(null);
+          setSelectedScope("org");
+          setSelectedTeamIds([]);
+        }}
+        selectedScope={selectedScope}
+        onScopeChange={(newScope) => {
+          setSelectedScope(newScope);
+          if (newScope !== "team") {
+            setSelectedTeamIds([]);
+          }
+        }}
+        selectedTeamIds={selectedTeamIds}
+        onTeamIdsChange={setSelectedTeamIds}
+        isAdmin={!!isAdmin}
+        isTeamAdmin={!!isTeamAdmin}
+        teams={teams}
+        existingCatalogItems={
+          pendingServer
+            ? (catalogItemsByName.get(pendingServer.name) ?? [])
+            : []
+        }
+        isPending={createMutation.isPending}
+        onConfirm={() => {
+          if (pendingServer) {
+            handleAddToCatalog(pendingServer);
+            setPendingServer(null);
+          }
+        }}
+      />
     </div>
   );
 }
@@ -520,8 +633,11 @@ function ServerCard({
   onRequestInstallation,
   isAdding,
   onOpenReadme,
-  isInCatalog,
-  userIsMcpServerAdmin,
+  existingCatalogItems,
+  teams,
+  canCreateCatalogItem,
+  isAdmin,
+  isTeamAdmin,
 }: {
   server: archestraCatalogTypes.ArchestraMcpServerManifest;
   onAddToCatalog: (
@@ -534,9 +650,37 @@ function ServerCard({
   onOpenReadme: (
     server: archestraCatalogTypes.ArchestraMcpServerManifest,
   ) => void;
-  isInCatalog: boolean;
-  userIsMcpServerAdmin: boolean;
+  existingCatalogItems: CatalogItem[];
+  teams: Array<{ id: string; name: string }> | undefined;
+  canCreateCatalogItem: boolean;
+  isAdmin: boolean;
+  isTeamAdmin: boolean;
 }) {
+  // Compute whether all possible scopes are covered
+  const isFullyCovered = useMemo(() => {
+    if (existingCatalogItems.length === 0) return false;
+    const hasPersonal = existingCatalogItems.some(
+      (i) => i.scope === "personal",
+    );
+    const hasOrg = existingCatalogItems.some((i) => i.scope === "org");
+    const coveredTeamIds = new Set(
+      existingCatalogItems
+        .filter((i) => i.scope === "team")
+        .flatMap((i) => i.teams?.map((t) => t.id) ?? []),
+    );
+    const allTeamsCovered =
+      (teams ?? []).length > 0
+        ? (teams ?? []).every((t) => coveredTeamIds.has(t.id))
+        : true;
+
+    // Factor in permissions: if user can't create at a scope, it doesn't need covering
+    const orgCovered = hasOrg || !isAdmin;
+    const teamCovered = allTeamsCovered || !(isAdmin || isTeamAdmin);
+    const personalCovered = hasPersonal;
+
+    return orgCovered && teamCovered && personalCovered;
+  }, [existingCatalogItems, teams, isAdmin, isTeamAdmin]);
+
   return (
     <Card className="flex flex-col">
       <CardHeader>
@@ -624,23 +768,210 @@ function ServerCard({
           </div>
           <Button
             onClick={() =>
-              userIsMcpServerAdmin
+              canCreateCatalogItem
                 ? onAddToCatalog(server)
                 : onRequestInstallation(server)
             }
-            disabled={isAdding || isInCatalog}
+            disabled={isAdding || isFullyCovered}
             size="sm"
             className="w-full"
             data-testid={E2eTestId.AddCatalogItemButton}
           >
-            {isInCatalog
+            {isFullyCovered
               ? "Added"
-              : userIsMcpServerAdmin
+              : canCreateCatalogItem
                 ? "Add to Your Registry"
                 : "Request to add to internal registry"}
           </Button>
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// Scope selection dialog with warnings about existing installations
+function ScopeDialog({
+  pendingServer,
+  onClose,
+  selectedScope,
+  onScopeChange,
+  selectedTeamIds,
+  onTeamIdsChange,
+  isAdmin,
+  isTeamAdmin,
+  teams,
+  existingCatalogItems,
+  isPending,
+  onConfirm,
+}: {
+  pendingServer: archestraCatalogTypes.ArchestraMcpServerManifest | null;
+  onClose: () => void;
+  selectedScope: "personal" | "team" | "org";
+  onScopeChange: (scope: "personal" | "team" | "org") => void;
+  selectedTeamIds: string[];
+  onTeamIdsChange: (ids: string[]) => void;
+  isAdmin: boolean;
+  isTeamAdmin: boolean;
+  teams: Array<{ id: string; name: string }> | undefined;
+  existingCatalogItems: CatalogItem[];
+  isPending: boolean;
+  onConfirm: () => void;
+}) {
+  const updateMutation = useUpdateInternalMcpCatalogItem();
+
+  const hasPersonal = existingCatalogItems.some((i) => i.scope === "personal");
+  const hasOrg = existingCatalogItems.some((i) => i.scope === "org");
+  const personalItem = existingCatalogItems.find((i) => i.scope === "personal");
+  const coveredTeamIds = new Set(
+    existingCatalogItems
+      .filter((i) => i.scope === "team")
+      .flatMap((i) => i.teams?.map((t) => t.id) ?? []),
+  );
+  const existingTeamNames = existingCatalogItems
+    .filter((i) => i.scope === "team")
+    .flatMap((i) => i.teams?.map((t) => t.name) ?? []);
+
+  // Compute disabled scopes
+  const disabledScopes: Partial<Record<"personal" | "team" | "org", string>> =
+    {};
+  if (hasPersonal) disabledScopes.personal = "Already added as personal";
+  if (hasOrg) disabledScopes.org = "Already added org-wide";
+  const availableTeams = (teams ?? []).filter((t) => !coveredTeamIds.has(t.id));
+  if ((teams ?? []).length > 0 && availableTeams.length === 0) {
+    disabledScopes.team = "Already added for all your teams";
+  }
+
+  // Contextual promote banner: show when user selects team scope and has a personal item
+  const showPromoteBanner =
+    selectedScope === "team" && hasPersonal && personalItem;
+
+  // Contextual info banner: show existing installations context
+  const infoParts: string[] = [];
+  if (hasOrg) infoParts.push("available org-wide");
+  if (existingTeamNames.length > 0)
+    infoParts.push(`added for ${existingTeamNames.join(", ")}`);
+  if (hasPersonal) infoParts.push("has a personal installation");
+
+  const handlePromoteToTeam = async () => {
+    if (!personalItem || selectedTeamIds.length === 0) return;
+    await updateMutation.mutateAsync({
+      id: personalItem.id,
+      data: { scope: "team", teams: selectedTeamIds },
+    });
+    onClose();
+  };
+
+  return (
+    <Dialog open={!!pendingServer} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <div className="flex items-start gap-3">
+            {pendingServer?.icon && (
+              <img
+                src={pendingServer.icon}
+                alt=""
+                className="w-10 h-10 rounded-lg flex-shrink-0"
+              />
+            )}
+            <DialogTitle>Add to Your Registry</DialogTitle>
+          </div>
+        </DialogHeader>
+
+        <AccessLevelSelector
+          scope={selectedScope}
+          onScopeChange={(newScope) => {
+            onScopeChange(newScope);
+            if (newScope !== "team") {
+              onTeamIdsChange([]);
+            }
+          }}
+          isAdmin={isAdmin}
+          isTeamAdmin={isTeamAdmin}
+          resourceLabel="MCP server"
+          teams={availableTeams}
+          assignedTeamIds={selectedTeamIds}
+          onTeamIdsChange={onTeamIdsChange}
+          hasNoAvailableTeams={availableTeams.length === 0}
+          disabledScopes={disabledScopes}
+          variant="full"
+        />
+
+        {/* Promote banner */}
+        {showPromoteBanner && selectedTeamIds.length > 0 && (
+          <div className="flex items-start gap-3 rounded-xl bg-primary/5 border border-primary/20 p-4">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Sparkles className="h-4 w-4" />
+            </div>
+            <div className="flex-1 min-w-0 space-y-2">
+              <div>
+                <p className="text-sm font-semibold">
+                  You already have a personal installation.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Promote it to share with your team — no duplicate needed.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                onClick={handlePromoteToTeam}
+                disabled={updateMutation.isPending}
+              >
+                {updateMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                    Promoting...
+                  </>
+                ) : (
+                  <>
+                    Promote to Team
+                    <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Info context for other existing installations */}
+        {infoParts.length > 0 &&
+          !(showPromoteBanner && selectedTeamIds.length > 0) && (
+            <div className="flex items-start gap-3 rounded-xl bg-primary/5 border border-primary/20 p-4">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Sparkles className="h-4 w-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold">
+                  Already in your registry
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  This server is already {infoParts.join(" and ")}.
+                </p>
+              </div>
+            </div>
+          )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            onClick={onConfirm}
+            disabled={
+              isPending ||
+              (selectedScope === "team" && selectedTeamIds.length === 0)
+            }
+          >
+            {isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Adding...
+              </>
+            ) : (
+              "Add"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

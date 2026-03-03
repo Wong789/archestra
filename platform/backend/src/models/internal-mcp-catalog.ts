@@ -1,4 +1,4 @@
-import { desc, eq, ilike, inArray, or } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { secretManager } from "@/secrets-manager";
 import type {
@@ -7,6 +7,7 @@ import type {
   UpdateInternalMcpCatalog,
 } from "@/types";
 import McpCatalogLabelModel from "./mcp-catalog-label";
+import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpServerModel from "./mcp-server";
 import SecretModel from "./secret";
 
@@ -156,7 +157,7 @@ class InternalMcpCatalogModel {
   static async create(
     catalogItem: InsertInternalMcpCatalog,
   ): Promise<InternalMcpCatalog> {
-    const { labels, ...dbValues } = catalogItem;
+    const { labels, teams, ...dbValues } = catalogItem;
 
     const [createdItem] = await db
       .insert(schema.internalMcpCatalogTable)
@@ -170,24 +171,53 @@ class InternalMcpCatalogModel {
       );
     }
 
+    // Sync team assignments for team-scoped items
+    if (createdItem.scope === "team" && teams && teams.length > 0) {
+      await McpCatalogTeamModel.syncCatalogTeams(createdItem.id, teams);
+    }
+
     const itemLabels = await McpCatalogLabelModel.getLabelsForCatalogItem(
       createdItem.id,
     );
+    const itemTeams = await McpCatalogTeamModel.getTeamDetailsForCatalog(
+      createdItem.id,
+    );
 
-    return { ...createdItem, labels: itemLabels };
+    return { ...createdItem, labels: itemLabels, teams: itemTeams };
   }
 
   static async findAll(options?: {
     expandSecrets?: boolean;
+    userId?: string;
+    isAdmin?: boolean;
   }): Promise<InternalMcpCatalog[]> {
-    const { expandSecrets = true } = options ?? {};
+    const { expandSecrets = true, userId, isAdmin } = options ?? {};
 
-    const dbItems = await db
-      .select()
-      .from(schema.internalMcpCatalogTable)
-      .orderBy(desc(schema.internalMcpCatalogTable.createdAt));
+    let dbItems: Array<typeof schema.internalMcpCatalogTable.$inferSelect>;
 
-    const catalogItems = await InternalMcpCatalogModel.attachLabels(dbItems);
+    // If userId is provided, filter by accessible IDs (scope-aware)
+    if (userId && !isAdmin) {
+      const accessibleIds =
+        await McpCatalogTeamModel.getUserAccessibleCatalogIds(userId, false);
+
+      if (accessibleIds.length === 0) {
+        return [];
+      }
+
+      dbItems = await db
+        .select()
+        .from(schema.internalMcpCatalogTable)
+        .where(inArray(schema.internalMcpCatalogTable.id, accessibleIds))
+        .orderBy(desc(schema.internalMcpCatalogTable.createdAt));
+    } else {
+      dbItems = await db
+        .select()
+        .from(schema.internalMcpCatalogTable)
+        .orderBy(desc(schema.internalMcpCatalogTable.createdAt));
+    }
+
+    const catalogItems =
+      await InternalMcpCatalogModel.attachLabelsAndTeams(dbItems);
 
     if (expandSecrets) {
       await InternalMcpCatalogModel.expandSecrets(catalogItems);
@@ -198,21 +228,48 @@ class InternalMcpCatalogModel {
 
   static async searchByQuery(
     query: string,
-    options?: { expandSecrets?: boolean },
+    options?: {
+      expandSecrets?: boolean;
+      userId?: string;
+      isAdmin?: boolean;
+    },
   ): Promise<InternalMcpCatalog[]> {
-    const { expandSecrets = true } = options ?? {};
+    const { expandSecrets = true, userId, isAdmin } = options ?? {};
 
-    const dbItems = await db
-      .select()
-      .from(schema.internalMcpCatalogTable)
-      .where(
-        or(
-          ilike(schema.internalMcpCatalogTable.name, `%${query}%`),
-          ilike(schema.internalMcpCatalogTable.description, `%${query}%`),
-        ),
-      );
+    const searchCondition = or(
+      ilike(schema.internalMcpCatalogTable.name, `%${query}%`),
+      ilike(schema.internalMcpCatalogTable.description, `%${query}%`),
+    );
 
-    const catalogItems = await InternalMcpCatalogModel.attachLabels(dbItems);
+    let dbItems: Array<typeof schema.internalMcpCatalogTable.$inferSelect>;
+
+    // If userId is provided, filter by accessible IDs (scope-aware)
+    if (userId && !isAdmin) {
+      const accessibleIds =
+        await McpCatalogTeamModel.getUserAccessibleCatalogIds(userId, false);
+
+      if (accessibleIds.length === 0) {
+        return [];
+      }
+
+      dbItems = await db
+        .select()
+        .from(schema.internalMcpCatalogTable)
+        .where(
+          and(
+            searchCondition,
+            inArray(schema.internalMcpCatalogTable.id, accessibleIds),
+          ),
+        );
+    } else {
+      dbItems = await db
+        .select()
+        .from(schema.internalMcpCatalogTable)
+        .where(searchCondition);
+    }
+
+    const catalogItems =
+      await InternalMcpCatalogModel.attachLabelsAndTeams(dbItems);
 
     if (expandSecrets) {
       await InternalMcpCatalogModel.expandSecrets(catalogItems);
@@ -237,7 +294,8 @@ class InternalMcpCatalogModel {
     }
 
     const labels = await McpCatalogLabelModel.getLabelsForCatalogItem(id);
-    const catalogItem: InternalMcpCatalog = { ...dbItem, labels };
+    const teams = await McpCatalogTeamModel.getTeamDetailsForCatalog(id);
+    const catalogItem: InternalMcpCatalog = { ...dbItem, labels, teams };
 
     if (expandSecrets) {
       await InternalMcpCatalogModel.expandSecrets([catalogItem]);
@@ -263,7 +321,8 @@ class InternalMcpCatalogModel {
     }
 
     const labels = await McpCatalogLabelModel.getLabelsForCatalogItem(id);
-    const catalogItem: InternalMcpCatalog = { ...dbItem, labels };
+    const teams = await McpCatalogTeamModel.getTeamDetailsForCatalog(id);
+    const catalogItem: InternalMcpCatalog = { ...dbItem, labels, teams };
 
     await InternalMcpCatalogModel.expandSecretsAndAlwaysResolveValues([
       catalogItem,
@@ -288,7 +347,8 @@ class InternalMcpCatalogModel {
       .from(schema.internalMcpCatalogTable)
       .where(inArray(schema.internalMcpCatalogTable.id, ids));
 
-    const catalogItems = await InternalMcpCatalogModel.attachLabels(dbItems);
+    const catalogItems =
+      await InternalMcpCatalogModel.attachLabelsAndTeams(dbItems);
 
     const result = new Map<string, InternalMcpCatalog>();
     for (const item of catalogItems) {
@@ -311,14 +371,15 @@ class InternalMcpCatalogModel {
     const labels = await McpCatalogLabelModel.getLabelsForCatalogItem(
       dbItem.id,
     );
-    return { ...dbItem, labels };
+    const teams = await McpCatalogTeamModel.getTeamDetailsForCatalog(dbItem.id);
+    return { ...dbItem, labels, teams };
   }
 
   static async update(
     id: string,
     catalogItem: Partial<UpdateInternalMcpCatalog>,
   ): Promise<InternalMcpCatalog | null> {
-    const { labels, ...dbValues } = catalogItem;
+    const { labels, teams, ...dbValues } = catalogItem;
 
     let dbItem: typeof schema.internalMcpCatalogTable.$inferSelect | undefined;
 
@@ -346,27 +407,41 @@ class InternalMcpCatalogModel {
       );
     }
 
+    // Sync team assignments if teams are provided
+    if (teams !== undefined) {
+      if (dbItem.scope === "team") {
+        await McpCatalogTeamModel.syncCatalogTeams(id, teams);
+      } else {
+        // Clear teams if scope is not "team"
+        await McpCatalogTeamModel.syncCatalogTeams(id, []);
+      }
+    }
+
     const itemLabels = await McpCatalogLabelModel.getLabelsForCatalogItem(id);
-    return { ...dbItem, labels: itemLabels };
+    const itemTeams = await McpCatalogTeamModel.getTeamDetailsForCatalog(id);
+    return { ...dbItem, labels: itemLabels, teams: itemTeams };
   }
 
   /**
-   * Bulk-load labels for an array of DB rows and attach them.
+   * Bulk-load labels and teams for an array of DB rows and attach them.
    */
-  private static async attachLabels(
+  private static async attachLabelsAndTeams(
     dbItems: Array<typeof schema.internalMcpCatalogTable.$inferSelect>,
   ): Promise<InternalMcpCatalog[]> {
     if (dbItems.length === 0) {
       return [];
     }
 
-    const labelsMap = await McpCatalogLabelModel.getLabelsForCatalogItems(
-      dbItems.map((item) => item.id),
-    );
+    const itemIds = dbItems.map((item) => item.id);
+    const [labelsMap, teamsMap] = await Promise.all([
+      McpCatalogLabelModel.getLabelsForCatalogItems(itemIds),
+      McpCatalogTeamModel.getTeamDetailsForCatalogs(itemIds),
+    ]);
 
     return dbItems.map((item) => ({
       ...item,
       labels: labelsMap.get(item.id) || [],
+      teams: teamsMap.get(item.id) || [],
     }));
   }
 

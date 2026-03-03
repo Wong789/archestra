@@ -28,7 +28,14 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   identityProvider: ["create", "read", "update", "delete"],
   member: ["create", "update", "delete"],
   invitation: ["create", "cancel"],
-  internalMcpCatalog: ["create", "read", "update", "delete"],
+  internalMcpCatalog: [
+    "create",
+    "read",
+    "update",
+    "delete",
+    "team-admin",
+    "admin",
+  ],
   mcpServer: ["create", "read", "update", "delete", "admin"],
   mcpServerInstallationRequest: ["create", "read", "update", "delete", "admin"],
   team: ["create", "read", "update", "delete", "admin"],
@@ -56,7 +63,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   interaction: ["create", "read", "update", "delete"],
   dualLlmConfig: ["read"],
   dualLlmResult: ["read"],
-  internalMcpCatalog: ["create", "read", "update", "delete"],
+  internalMcpCatalog: ["create", "read", "update", "delete", "team-admin"],
   mcpServer: ["create", "read", "update", "delete"],
   mcpServerInstallationRequest: ["create", "read", "update", "delete"],
   organization: ["read"],
@@ -82,7 +89,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   interaction: ["create", "read", "update", "delete"],
   dualLlmConfig: ["read"],
   dualLlmResult: ["read"],
-  internalMcpCatalog: ["read"],
+  internalMcpCatalog: ["create", "read", "update", "delete"],
   mcpServer: ["create", "read", "delete"],
   mcpServerInstallationRequest: ["create", "read", "update"],
   organization: ["read"],
@@ -266,24 +273,16 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetInternalMcpCatalog]: {
     internalMcpCatalog: ["read"],
   },
-  [RouteId.CreateInternalMcpCatalogItem]: {
-    internalMcpCatalog: ["create"],
-  },
+  [RouteId.CreateInternalMcpCatalogItem]: {},
   [RouteId.GetInternalMcpCatalogItem]: {
     internalMcpCatalog: ["read"],
   },
   [RouteId.GetInternalMcpCatalogTools]: {
     internalMcpCatalog: ["read"],
   },
-  [RouteId.UpdateInternalMcpCatalogItem]: {
-    internalMcpCatalog: ["update"],
-  },
-  [RouteId.DeleteInternalMcpCatalogItem]: {
-    internalMcpCatalog: ["delete"],
-  },
-  [RouteId.DeleteInternalMcpCatalogItemByName]: {
-    internalMcpCatalog: ["delete"],
-  },
+  [RouteId.UpdateInternalMcpCatalogItem]: {},
+  [RouteId.DeleteInternalMcpCatalogItem]: {},
+  [RouteId.DeleteInternalMcpCatalogItemByName]: {},
   [RouteId.GetInternalMcpCatalogLabelKeys]: {
     internalMcpCatalog: ["read"],
   },

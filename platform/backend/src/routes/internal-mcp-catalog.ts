@@ -2,6 +2,10 @@ import { isBuiltInCatalogId, isPlaywrightCatalogItem, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
+import {
+  getMcpCatalogPermissionChecker,
+  requireCatalogModifyPermission,
+} from "@/auth/mcp-catalog-permissions";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -13,6 +17,7 @@ import mcpServerRuntimeManager from "@/mcp-server-runtime/manager";
 import {
   InternalMcpCatalogModel,
   McpCatalogLabelModel,
+  McpCatalogTeamModel,
   McpServerModel,
   TeamModel,
   ToolModel,
@@ -27,6 +32,7 @@ import {
   constructResponseSchema,
   DeleteObjectResponseSchema,
   InsertInternalMcpCatalogSchema,
+  type McpCatalogScope,
   SelectInternalMcpCatalogSchema,
   UpdateInternalMcpCatalogSchema,
   UuidIdSchema,
@@ -61,10 +67,20 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async (_request, reply) => {
-      // Don't expand secrets for list view
+    async (request, reply) => {
+      const checker = await getMcpCatalogPermissionChecker({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
+      checker.require("read");
+
+      // Don't expand secrets for list view; filter by scope
       return reply.send(
-        await InternalMcpCatalogModel.findAll({ expandSecrets: false }),
+        await InternalMcpCatalogModel.findAll({
+          expandSecrets: false,
+          userId: request.user.id,
+          isAdmin: checker.isAdmin(),
+        }),
       );
     },
   );
@@ -76,7 +92,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.CreateInternalMcpCatalogItem,
         description: "Create a new Internal MCP catalog item",
         tags: ["MCP Catalog"],
-        body: InsertInternalMcpCatalogSchema.extend({
+        body: InsertInternalMcpCatalogSchema.omit({ authorId: true }).extend({
           // BYOS: External Vault path for OAuth client secret
           oauthClientSecretVaultPath: z.string().optional(),
           // BYOS: External Vault key for OAuth client secret
@@ -89,7 +105,41 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectInternalMcpCatalogSchema),
       },
     },
-    async ({ body }, reply) => {
+    async (request, reply) => {
+      const { body } = request;
+      const checker = await getMcpCatalogPermissionChecker({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
+      checker.require("create");
+
+      // Validate scope permissions
+      const scope = (body.scope ?? "org") as McpCatalogScope;
+      requireCatalogModifyPermission({
+        checker,
+        catalogScope: scope,
+        catalogAuthorId: request.user.id,
+        userId: request.user.id,
+      });
+
+      // Validate team membership for non-admins with team scope
+      if (
+        scope === "team" &&
+        body.teams &&
+        body.teams.length > 0 &&
+        !checker.isAdmin()
+      ) {
+        for (const teamId of body.teams) {
+          const isMember = await TeamModel.isUserInTeam(
+            teamId,
+            request.user.id,
+          );
+          if (!isMember) {
+            throw new ApiError(403, "You can only assign teams you belong to");
+          }
+        }
+      }
+
       const {
         oauthClientSecretVaultPath,
         oauthClientSecretVaultKey,
@@ -97,6 +147,15 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         localConfigVaultKey,
         ...restBody
       } = body;
+
+      // Set scope on body
+      restBody.scope = scope;
+
+      // Clear teams if scope is not "team"
+      if (scope !== "team") {
+        restBody.teams = undefined;
+      }
+
       let clientSecretId: string | undefined;
       let localConfigSecretId: string | undefined;
 
@@ -229,7 +288,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const catalogItem = await InternalMcpCatalogModel.create(restBody);
+      const catalogItem = await InternalMcpCatalogModel.create({
+        ...restBody,
+        authorId: request.user.id,
+      });
       return reply.send(catalogItem);
     },
   );
@@ -247,10 +309,30 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectInternalMcpCatalogSchema),
       },
     },
-    async ({ params: { id } }, reply) => {
+    async (request, reply) => {
+      const {
+        params: { id },
+      } = request;
+
+      const checker = await getMcpCatalogPermissionChecker({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
+      checker.require("read");
+
       const catalogItem = await InternalMcpCatalogModel.findById(id);
 
       if (!catalogItem) {
+        throw new ApiError(404, "Catalog item not found");
+      }
+
+      // Check scope-based access
+      const hasAccess = await McpCatalogTeamModel.userHasCatalogAccess(
+        request.user.id,
+        id,
+        checker.isAdmin(),
+      );
+      if (!hasAccess) {
         throw new ApiError(404, "Catalog item not found");
       }
 
@@ -310,7 +392,18 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectInternalMcpCatalogSchema),
       },
     },
-    async ({ params: { id }, body }, reply) => {
+    async (request, reply) => {
+      const {
+        params: { id },
+        body,
+      } = request;
+
+      const checker = await getMcpCatalogPermissionChecker({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
+      checker.require("update");
+
       if (isBuiltInCatalogId(id) && !isPlaywrightCatalogItem(id)) {
         throw new ApiError(403, "Built-in catalog items cannot be modified");
       }
@@ -333,6 +426,57 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!originalCatalogItem) {
         throw new ApiError(404, "Catalog item not found");
+      }
+
+      // Check if user can modify this item based on its current scope
+      requireCatalogModifyPermission({
+        checker,
+        catalogScope: originalCatalogItem.scope as McpCatalogScope,
+        catalogAuthorId: originalCatalogItem.authorId,
+        userId: request.user.id,
+      });
+
+      // If changing scope, validate the new scope permissions
+      if (restBody.scope && restBody.scope !== originalCatalogItem.scope) {
+        const newScope = restBody.scope as McpCatalogScope;
+
+        // Prevent downgrade: shared → personal
+        if (
+          newScope === "personal" &&
+          originalCatalogItem.scope !== "personal"
+        ) {
+          throw new ApiError(
+            400,
+            "Cannot change scope from shared to personal",
+          );
+        }
+
+        requireCatalogModifyPermission({
+          checker,
+          catalogScope: newScope,
+          catalogAuthorId: originalCatalogItem.authorId,
+          userId: request.user.id,
+        });
+      }
+
+      // Validate team membership for non-admins with team scope
+      const effectiveScope = (restBody.scope ??
+        originalCatalogItem.scope) as McpCatalogScope;
+      if (
+        effectiveScope === "team" &&
+        restBody.teams &&
+        restBody.teams.length > 0 &&
+        !checker.isAdmin()
+      ) {
+        for (const teamId of restBody.teams) {
+          const isMember = await TeamModel.isUserInTeam(
+            request.user.id,
+            teamId,
+          );
+          if (!isMember) {
+            throw new ApiError(403, "You can only assign teams you belong to");
+          }
+        }
       }
 
       let clientSecretId = originalCatalogItem.clientSecretId;
@@ -630,7 +774,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id } }, reply) => {
+    async (request, reply) => {
+      const {
+        params: { id },
+      } = request;
+
+      const checker = await getMcpCatalogPermissionChecker({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
+      checker.require("delete");
+
       if (isBuiltInCatalogId(id)) {
         throw new ApiError(403, "Built-in catalog items cannot be deleted");
       }
@@ -640,13 +794,23 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         expandSecrets: false,
       });
 
-      if (catalogItem?.clientSecretId) {
-        // Delete the associated OAuth secret
+      if (!catalogItem) {
+        throw new ApiError(404, "Catalog item not found");
+      }
+
+      // Check scope-based modify permission
+      requireCatalogModifyPermission({
+        checker,
+        catalogScope: catalogItem.scope as McpCatalogScope,
+        catalogAuthorId: catalogItem.authorId,
+        userId: request.user.id,
+      });
+
+      if (catalogItem.clientSecretId) {
         await secretManager().deleteSecret(catalogItem.clientSecretId);
       }
 
-      if (catalogItem?.localConfigSecretId) {
-        // Delete the associated local config secret
+      if (catalogItem.localConfigSecretId) {
         await secretManager().deleteSecret(catalogItem.localConfigSecretId);
       }
 
@@ -669,7 +833,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { name } }, reply) => {
+    async (request, reply) => {
+      const {
+        params: { name },
+      } = request;
+
+      const checker = await getMcpCatalogPermissionChecker({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
+      checker.require("delete");
+
       // Find the catalog item by name
       const catalogItem = await InternalMcpCatalogModel.findByName(name);
 
@@ -681,13 +855,19 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(403, "Built-in catalog items cannot be deleted");
       }
 
-      if (catalogItem?.clientSecretId) {
-        // Delete the associated OAuth secret
+      // Check scope-based modify permission
+      requireCatalogModifyPermission({
+        checker,
+        catalogScope: catalogItem.scope as McpCatalogScope,
+        catalogAuthorId: catalogItem.authorId,
+        userId: request.user.id,
+      });
+
+      if (catalogItem.clientSecretId) {
         await secretManager().deleteSecret(catalogItem.clientSecretId);
       }
 
-      if (catalogItem?.localConfigSecretId) {
-        // Delete the associated local config secret
+      if (catalogItem.localConfigSecretId) {
         await secretManager().deleteSecret(catalogItem.localConfigSecretId);
       }
 

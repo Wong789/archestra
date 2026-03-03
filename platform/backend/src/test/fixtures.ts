@@ -410,6 +410,9 @@ async function makeInternalMcpCatalog(
       | "localConfig"
       | "userConfig"
       | "oauthConfig"
+      | "scope"
+      | "authorId"
+      | "teams"
     >
   > = {},
 ) {

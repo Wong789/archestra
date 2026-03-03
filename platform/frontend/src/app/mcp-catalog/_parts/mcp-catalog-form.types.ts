@@ -48,6 +48,10 @@ export const formSchema = z
     labels: z
       .array(z.object({ key: z.string(), value: z.string() }))
       .optional(),
+    // Access control scope
+    scope: z.enum(["personal", "team", "org"]).optional(),
+    // Assigned team IDs for team-scoped items
+    assignedTeamIds: z.array(z.string()).optional(),
   })
   .refine(
     (data) => {

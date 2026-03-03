@@ -143,6 +143,18 @@ export function transformFormToApiData(
     data.labels = [];
   }
 
+  // Handle scope and teams
+  if (values.scope) {
+    (data as Record<string, unknown>).scope = values.scope;
+  }
+  if (
+    values.scope === "team" &&
+    values.assignedTeamIds &&
+    values.assignedTeamIds.length > 0
+  ) {
+    (data as Record<string, unknown>).teams = values.assignedTeamIds;
+  }
+
   return data;
 }
 
@@ -291,6 +303,19 @@ export function transformCatalogItemToFormValues(
     };
   }
 
+  // Extract scope and teams
+  const scope =
+    ((item as Record<string, unknown>).scope as
+      | "personal"
+      | "team"
+      | "org"
+      | undefined) ?? "org";
+  const teams =
+    ((item as Record<string, unknown>).teams as
+      | Array<{ id: string; name: string }>
+      | undefined) ?? [];
+  const assignedTeamIds = teams.map((t) => t.id);
+
   return {
     name: item.name,
     serverType: item.serverType as "remote" | "local",
@@ -307,6 +332,9 @@ export function transformCatalogItemToFormValues(
     oauthClientSecretVaultKey,
     // Labels
     labels: item.labels ?? [],
+    // Access control
+    scope,
+    assignedTeamIds,
   } as McpCatalogFormValues;
 }
 

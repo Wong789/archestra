@@ -5,6 +5,7 @@ import type { archestraApiTypes } from "@shared";
 import { AlertCircle, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { lazy, useEffect, useRef, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
+import { AccessLevelSelector } from "@/components/access-level-selector";
 import {
   type ProfileLabel,
   ProfileLabels,
@@ -40,9 +41,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useHasPermissions } from "@/lib/auth.query";
 import { useFeatureFlag, useFeatureValue } from "@/lib/features.hook";
 import { useK8sImagePullSecrets } from "@/lib/internal-mcp-catalog.query";
 import { useGetSecret } from "@/lib/secrets.query";
+import { useTeams } from "@/lib/team.query";
 import {
   formSchema,
   type McpCatalogFormValues,
@@ -136,6 +139,20 @@ export function McpCatalogForm({
   // Check if BYOS feature is available (enterprise license)
   const showByosOption = useFeatureFlag("byosEnabled");
 
+  // Permissions for scope selector
+  const { data: isAdmin } = useHasPermissions({
+    internalMcpCatalog: ["admin"],
+  });
+  const { data: isTeamAdmin } = useHasPermissions({
+    internalMcpCatalog: ["team-admin"],
+  });
+  const { data: teams } = useTeams();
+
+  // Scope state
+  const scope = form.watch("scope") ?? "org";
+  const assignedTeamIds = form.watch("assignedTeamIds") ?? [];
+  const hasNoAvailableTeams = !teams || teams.length === 0;
+
   // Use field array for environment variables
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -225,6 +242,7 @@ export function McpCatalogForm({
                 <FormLabel>
                   Name <span className="text-destructive">*</span>
                 </FormLabel>
+                <FormDescription>Display name for this server</FormDescription>
                 <FormControl>
                   <Input
                     placeholder="e.g., GitHub MCP Server"
@@ -232,10 +250,34 @@ export function McpCatalogForm({
                     disabled={nameDisabled}
                   />
                 </FormControl>
-                <FormDescription>Display name for this server</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
+          />
+
+          <AccessLevelSelector
+            scope={scope}
+            onScopeChange={(newScope) => {
+              form.setValue("scope", newScope);
+              if (newScope !== "team") {
+                form.setValue("assignedTeamIds", []);
+              }
+            }}
+            isAdmin={!!isAdmin}
+            isTeamAdmin={!!isTeamAdmin}
+            initialScope={
+              initialValues
+                ? (((initialValues as Record<string, unknown>).scope as
+                    | "personal"
+                    | "team"
+                    | "org") ?? undefined)
+                : undefined
+            }
+            resourceLabel="MCP server"
+            teams={teams}
+            assignedTeamIds={assignedTeamIds}
+            onTeamIdsChange={(ids) => form.setValue("assignedTeamIds", ids)}
+            hasNoAvailableTeams={hasNoAvailableTeams}
           />
 
           {currentServerType === "remote" && (
@@ -247,6 +289,9 @@ export function McpCatalogForm({
                   <FormLabel>
                     Server URL <span className="text-destructive">*</span>
                   </FormLabel>
+                  <FormDescription>
+                    The remote MCP server endpoint
+                  </FormDescription>
                   <FormControl>
                     <Input
                       placeholder="https://api.example.com/mcp"
@@ -254,9 +299,6 @@ export function McpCatalogForm({
                       {...field}
                     />
                   </FormControl>
-                  <FormDescription>
-                    The remote MCP server endpoint
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
