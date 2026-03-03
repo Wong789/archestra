@@ -201,7 +201,7 @@ class ChatOpsChannelBindingModel {
           .select()
           .from(t)
           .where(and(...statusConditions))
-          .orderBy(orderByClause, asc(t.id))
+          .orderBy(desc(t.isDm), orderByClause, asc(t.id))
           .limit(pagination.limit)
           .offset(pagination.offset),
         db
