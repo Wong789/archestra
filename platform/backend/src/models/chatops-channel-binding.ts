@@ -172,10 +172,11 @@ class ChatOpsChannelBindingModel {
     ];
 
     // Filtered conditions (adds search + workspace on top of global)
+    const escapedSearch = filters?.search?.replace(/[%_\\]/g, "\\$&");
     const filteredConditions = [
       ...globalConditions,
       ...(filters?.workspaceId ? [eq(t.workspaceId, filters.workspaceId)] : []),
-      ...(filters?.search ? [ilike(t.channelName, `%${filters.search}%`)] : []),
+      ...(escapedSearch ? [ilike(t.channelName, `%${escapedSearch}%`)] : []),
     ];
 
     // Data conditions (adds status filter on top of filtered)

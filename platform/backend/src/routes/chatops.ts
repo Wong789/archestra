@@ -1103,13 +1103,9 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Check if user already has a DM binding (real or pending) for this provider
-      const existingBindings =
-        await ChatOpsChannelBindingModel.findByOrganization(
-          request.organizationId,
-        );
-      const existingDm = existingBindings.find(
-        (b) =>
-          b.provider === provider && b.isDm && b.dmOwnerEmail === userEmail,
+      const existingDm = await ChatOpsChannelBindingModel.findDmBindingByEmail(
+        provider,
+        userEmail,
       );
 
       if (existingDm) {

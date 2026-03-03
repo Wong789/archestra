@@ -6,7 +6,6 @@ import {
   ChevronDown,
   ChevronUp,
   Hash,
-  Loader2,
   Plus,
   Search,
   X,
@@ -248,6 +247,7 @@ export function ChannelsSection({
 
   const handleSortToggle = useCallback(
     (column: SortByColumn) => {
+      clearSelection();
       if (sortByFromUrl === column) {
         updateUrlParams({
           sortDirection: sortDirectionFromUrl === "asc" ? "desc" : "asc",
@@ -257,7 +257,7 @@ export function ChannelsSection({
         updateUrlParams({ sortBy: column, sortDirection: "asc", page: "1" });
       }
     },
-    [sortByFromUrl, sortDirectionFromUrl, updateUrlParams],
+    [sortByFromUrl, sortDirectionFromUrl, updateUrlParams, clearSelection],
   );
 
   const handlePaginationChange = useCallback(
