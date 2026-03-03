@@ -1135,6 +1135,13 @@
       "when": 1772475713606,
       "tag": "0161_gifted_frightful_four",
       "breakpoints": true
+    },
+    {
+      "idx": 162,
+      "version": "7",
+      "when": 1772551648643,
+      "tag": "0162_cloudy_gauntlet",
+      "breakpoints": true
     }
   ]
 }

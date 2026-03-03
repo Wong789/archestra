@@ -869,11 +869,11 @@ class McpClient {
     // Get all servers for this catalog
     const allServers = await McpServerModel.findByCatalogId(tool.catalogId);
 
-    // Priority 1: Personal credential owned by current user (no teamId)
+    // Priority 1: Personal credential owned by current user (no teamId, not org-wide)
     // That happens only from chat UI when we know the user ID
     if (tokenAuth.userId) {
       const userServer = allServers.find(
-        (s) => s.ownerId === tokenAuth.userId && !s.teamId,
+        (s) => s.ownerId === tokenAuth.userId && !s.teamId && !s.isOrgWide,
       );
       if (userServer) {
         logger.info(
@@ -897,11 +897,12 @@ class McpClient {
       const teamMembers = await TeamModel.getTeamMembers(tokenAuth.teamId);
       const teamMemberIds = new Set(teamMembers.map((m) => m.userId));
 
-      // Priority 2: Personal credential owned by a team member (no teamId on server)
+      // Priority 2: Personal credential owned by a team member (no teamId on server, not org-wide)
       for (const server of allServers) {
         if (
           server.ownerId &&
           !server.teamId &&
+          !server.isOrgWide &&
           teamMemberIds.has(server.ownerId)
         ) {
           logger.info(
@@ -942,7 +943,24 @@ class McpClient {
       }
     }
 
-    // Priority 4: Otherwise, if organization-wide token is used, use first available server
+    // Priority 4: Org-wide server credential (isOrgWide = true)
+    const orgWideServer = allServers.find((s) => s.isOrgWide);
+    if (orgWideServer) {
+      logger.info(
+        {
+          toolName: toolCall.name,
+          catalogId: tool.catalogId,
+          serverId: orgWideServer.id,
+        },
+        `Dynamic resolution: using org-wide server ${orgWideServer.id} for tool ${toolCall.name}`,
+      );
+      return {
+        targetMcpServerId: orgWideServer.id,
+        mcpServerName: orgWideServer.name,
+      };
+    }
+
+    // Priority 5: Otherwise, if organization-wide token is used, use first available server
     if (tokenAuth.isOrganizationToken && allServers.length > 0) {
       logger.info(
         {
@@ -950,7 +968,7 @@ class McpClient {
           catalogId: tool.catalogId,
           serverId: allServers[0].id,
         },
-        `Dynamic resolution: using org-wide server of ${allServers[0].id} for tool ${toolCall.name}`,
+        `Dynamic resolution: using first available server for org token ${allServers[0].id} for tool ${toolCall.name}`,
       );
       return {
         targetMcpServerId: allServers[0].id,
@@ -958,7 +976,7 @@ class McpClient {
       };
     }
 
-    // Priority 5: Fallback for external IdP users if earlier team-based resolution didn't match
+    // Priority 6: Fallback for external IdP users if earlier team-based resolution didn't match
     if (tokenAuth.isExternalIdp && allServers.length > 0) {
       logger.info(
         {

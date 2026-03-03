@@ -6,7 +6,15 @@ import {
   MCP_CATALOG_INSTALL_QUERY_PARAM,
 } from "@shared";
 import { useQueryClient } from "@tanstack/react-query";
-import { Cable, Plus, Search } from "lucide-react";
+import {
+  Building2,
+  Cable,
+  ChevronDown,
+  Plus,
+  Search,
+  User,
+  Users,
+} from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -16,6 +24,11 @@ import {
   type OAuthInstallResult,
 } from "@/components/oauth-confirmation-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useDialogs } from "@/lib/dialog.hook";
@@ -53,6 +66,7 @@ import {
 import {
   type CatalogItem,
   type InstalledServer,
+  type InstallScope,
   McpServerCard,
 } from "./mcp-server-card";
 import {
@@ -135,6 +149,10 @@ export function InternalMCPCatalog({
     useState<CatalogItem | null>(null);
   const [localServerCatalogItem, setLocalServerCatalogItem] =
     useState<CatalogItem | null>(null);
+  const [installScope, setInstallScope] = useState<InstallScope | undefined>();
+  const [personalOpen, setPersonalOpen] = useState(true);
+  const [teamOpen, setTeamOpen] = useState(true);
+  const [orgOpen, setOrgOpen] = useState(true);
   // Track server ID when reinstalling (vs new installation)
   const [reinstallServerId, setReinstallServerId] = useState<string | null>(
     null,
@@ -284,7 +302,10 @@ export function InternalMCPCatalog({
   const handleInstallRemoteServer = async (
     catalogItem: CatalogItem,
     _teamMode: boolean,
+    installScope?: InstallScope,
   ) => {
+    setInstallScope(installScope);
+
     const hasUserConfig =
       catalogItem.userConfig && Object.keys(catalogItem.userConfig).length > 0;
 
@@ -299,7 +320,12 @@ export function InternalMCPCatalog({
     openDialog("remote-install");
   };
 
-  const handleInstallLocalServer = async (catalogItem: CatalogItem) => {
+  const handleInstallLocalServer = async (
+    catalogItem: CatalogItem,
+    installScope?: InstallScope,
+  ) => {
+    setInstallScope(installScope);
+
     // Check if this local server requires OAuth authentication
     if (catalogItem.oauthConfig) {
       // Check if there are prompted env vars that need collecting first
@@ -366,6 +392,7 @@ export function InternalMCPCatalog({
       name: catalogItem.name,
       catalogId: catalogItem.id,
       teamId: result.teamId ?? undefined,
+      isOrgWide: result.isOrgWide,
     });
     closeDialog("no-auth");
     setNoAuthCatalogItem(null);
@@ -464,6 +491,7 @@ export function InternalMCPCatalog({
       isByosVault: installResult.isByosVault,
       teamId: installResult.teamId ?? undefined,
       serviceAccount: installResult.serviceAccount,
+      isOrgWide: installResult.isOrgWide,
       dontShowToast: true,
     });
 
@@ -513,6 +541,7 @@ export function InternalMCPCatalog({
       }),
       isByosVault: result.isByosVault,
       teamId: result.teamId ?? undefined,
+      isOrgWide: result.isOrgWide,
     });
     setInstallingItemId(null);
 
@@ -757,6 +786,14 @@ export function InternalMCPCatalog({
     filterCatalogItems(catalogItems || [], searchQueryFromUrl),
   ).filter((item) => item.id !== ARCHESTRA_MCP_CATALOG_ID);
 
+  const personalItems = filteredCatalogItems.filter(
+    (item) => item.scope === "personal",
+  );
+  const teamItems = filteredCatalogItems.filter(
+    (item) => item.scope === "team",
+  );
+  const orgItems = filteredCatalogItems.filter((item) => item.scope === "org");
+
   const getInstalledServerInfo = (item: CatalogItem) => {
     const installedServer = getAggregatedInstallation(item.id);
     const isInstallInProgress =
@@ -780,6 +817,91 @@ export function InternalMCPCatalog({
       isInstallInProgress,
       currentUserInstalledLocalServer,
     };
+  };
+
+  const renderScopeSection = ({
+    items,
+    icon: Icon,
+    title,
+    subtitle,
+    open,
+    onOpenChange,
+  }: {
+    items: CatalogItem[];
+    icon: React.ComponentType<{ className?: string }>;
+    title: string;
+    subtitle: string;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+  }) => {
+    if (items.length === 0) return null;
+
+    return (
+      <Collapsible open={open} onOpenChange={onOpenChange}>
+        <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-md px-2 py-2 hover:bg-muted/50 transition-colors">
+          <Icon className="h-4 w-4 text-muted-foreground" />
+          <span className="font-semibold text-sm">{title}</span>
+          <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+            {items.length}
+          </span>
+          <span className="text-xs text-muted-foreground">{subtitle}</span>
+          <ChevronDown
+            className={`ml-auto h-4 w-4 text-muted-foreground transition-transform ${
+              open ? "" : "-rotate-90"
+            }`}
+          />
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 pt-2">
+            {items.map((item) => {
+              const serverInfo = getInstalledServerInfo(item);
+              return (
+                <McpServerCard
+                  variant={
+                    item.serverType === "builtin"
+                      ? "builtin"
+                      : item.serverType === "remote"
+                        ? "remote"
+                        : "local"
+                  }
+                  key={item.id}
+                  item={item}
+                  installedServer={serverInfo.installedServer}
+                  installingItemId={installingItemId}
+                  installationStatus={
+                    serverInfo.installedServer?.localInstallationStatus ||
+                    undefined
+                  }
+                  deploymentStatuses={deploymentStatuses}
+                  onInstallRemoteServer={(scope) =>
+                    handleInstallRemoteServer(item, false, scope)
+                  }
+                  onInstallLocalServer={(scope) =>
+                    isPlaywrightCatalogItem(item.id)
+                      ? handleInstallPlaywright(item)
+                      : handleInstallLocalServer(item, scope)
+                  }
+                  onReinstall={() => handleReinstall(item)}
+                  onEdit={() => setEditingItem(item)}
+                  onDetails={() => {
+                    setDetailsServerName(item.name);
+                  }}
+                  onDelete={() => setDeletingItem(item)}
+                  onCancelInstallation={handleCancelInstallation}
+                  autoOpenAssignmentsDialog={
+                    autoOpenAssignmentsCatalogId === item.id
+                  }
+                  onAssignmentsDialogClose={() =>
+                    setAutoOpenAssignmentsCatalogId(null)
+                  }
+                  isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
+                />
+              );
+            })}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    );
   };
 
   return (
@@ -823,51 +945,30 @@ export function InternalMCPCatalog({
       </div>
       <div className="space-y-4">
         {filteredCatalogItems.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filteredCatalogItems.map((item) => {
-              const serverInfo = getInstalledServerInfo(item);
-              return (
-                <McpServerCard
-                  variant={
-                    item.serverType === "builtin"
-                      ? "builtin"
-                      : item.serverType === "remote"
-                        ? "remote"
-                        : "local"
-                  }
-                  key={item.id}
-                  item={item}
-                  installedServer={serverInfo.installedServer}
-                  installingItemId={installingItemId}
-                  installationStatus={
-                    serverInfo.installedServer?.localInstallationStatus ||
-                    undefined
-                  }
-                  deploymentStatuses={deploymentStatuses}
-                  onInstallRemoteServer={() =>
-                    handleInstallRemoteServer(item, false)
-                  }
-                  onInstallLocalServer={() =>
-                    isPlaywrightCatalogItem(item.id)
-                      ? handleInstallPlaywright(item)
-                      : handleInstallLocalServer(item)
-                  }
-                  onReinstall={() => handleReinstall(item)}
-                  onEdit={() => setEditingItem(item)}
-                  onDetails={() => {
-                    setDetailsServerName(item.name);
-                  }}
-                  onDelete={() => setDeletingItem(item)}
-                  onCancelInstallation={handleCancelInstallation}
-                  autoOpenAssignmentsDialog={
-                    autoOpenAssignmentsCatalogId === item.id
-                  }
-                  onAssignmentsDialogClose={() =>
-                    setAutoOpenAssignmentsCatalogId(null)
-                  }
-                  isBuiltInPlaywright={isPlaywrightCatalogItem(item.id)}
-                />
-              );
+          <div className="space-y-6">
+            {renderScopeSection({
+              items: personalItems,
+              icon: User,
+              title: "Personal",
+              subtitle: "Only visible to you",
+              open: personalOpen,
+              onOpenChange: setPersonalOpen,
+            })}
+            {renderScopeSection({
+              items: teamItems,
+              icon: Users,
+              title: "Team",
+              subtitle: "Shared with team members",
+              open: teamOpen,
+              onOpenChange: setTeamOpen,
+            })}
+            {renderScopeSection({
+              items: orgItems,
+              icon: Building2,
+              title: "Organization",
+              subtitle: "Available org-wide",
+              open: orgOpen,
+              onOpenChange: setOrgOpen,
             })}
           </div>
         ) : (
@@ -946,10 +1047,12 @@ export function InternalMCPCatalog({
         onClose={() => {
           closeDialog("remote-install");
           setSelectedCatalogItem(null);
+          setInstallScope(undefined);
         }}
         onConfirm={handleRemoteServerInstallConfirm}
         catalogItem={selectedCatalogItem}
         isInstalling={installMutation.isPending}
+        installScope={installScope}
       />
 
       <OAuthConfirmationDialog
@@ -989,6 +1092,7 @@ export function InternalMCPCatalog({
         onInstall={handleNoAuthConfirm}
         catalogItem={noAuthCatalogItem}
         isInstalling={installMutation.isPending}
+        installScope={installScope}
       />
 
       {localServerCatalogItem && (
@@ -999,6 +1103,7 @@ export function InternalMCPCatalog({
             setLocalServerCatalogItem(null);
             setReinstallServerId(null);
             setReinstallServerTeamId(null);
+            setInstallScope(undefined);
           }}
           onConfirm={handleLocalServerInstallConfirm}
           catalogItem={localServerCatalogItem}
@@ -1007,6 +1112,7 @@ export function InternalMCPCatalog({
           }
           isReinstall={!!reinstallServerId}
           existingTeamId={reinstallServerTeamId}
+          installScope={installScope}
         />
       )}
     </div>

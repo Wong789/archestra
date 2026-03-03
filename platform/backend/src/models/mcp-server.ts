@@ -27,8 +27,12 @@ class McpServerModel {
     serverType: string;
     ownerId: string | null;
     teamId: string | null;
+    isOrgWide?: boolean;
   }): string {
     if (params.serverType === "local") {
+      if (params.isOrgWide) {
+        return `${params.baseName}-org`;
+      }
       if (params.teamId) {
         return `${params.baseName}-${params.teamId}`;
       }
@@ -47,6 +51,7 @@ class McpServerModel {
       serverType: serverData.serverType,
       ownerId: userId ?? null,
       teamId: serverData.teamId ?? null,
+      isOrgWide: serverData.isOrgWide,
     });
 
     // ownerId is part of serverData and will be inserted
@@ -162,15 +167,24 @@ class McpServerModel {
       // Get MCP servers accessible through:
       // 1. Team membership (servers assigned to user's teams)
       // 2. Personal access (user's own servers)
-      const [teamAccessibleMcpServerIds, personalMcpServerIds] =
-        await Promise.all([
-          McpServerModel.getUserAccessibleMcpServerIdsByTeam(userId),
-          McpServerUserModel.getUserPersonalMcpServerIds(userId),
-        ]);
+      // 3. Org-wide servers (visible to all users)
+      const [
+        teamAccessibleMcpServerIds,
+        personalMcpServerIds,
+        orgWideMcpServerIds,
+      ] = await Promise.all([
+        McpServerModel.getUserAccessibleMcpServerIdsByTeam(userId),
+        McpServerUserModel.getUserPersonalMcpServerIds(userId),
+        McpServerModel.getOrgWideMcpServerIds(),
+      ]);
 
       // Combine all lists
       const accessibleMcpServerIds = [
-        ...new Set([...teamAccessibleMcpServerIds, ...personalMcpServerIds]),
+        ...new Set([
+          ...teamAccessibleMcpServerIds,
+          ...personalMcpServerIds,
+          ...orgWideMcpServerIds,
+        ]),
       ];
 
       if (accessibleMcpServerIds.length === 0) {
@@ -237,13 +251,17 @@ class McpServerModel {
   ): Promise<McpServer | null> {
     // Check access control for non-MCP server admins
     if (userId && !isMcpServerAdmin) {
-      const [hasTeamAccess, hasPersonalAccess] = await Promise.all([
-        McpServerModel.userHasMcpServerAccessByTeam(userId, id),
-        McpServerUserModel.userHasPersonalMcpServerAccess(userId, id),
-      ]);
+      // Org-wide servers are accessible to all users
+      const isOrgWide = await McpServerModel.isOrgWideServer(id);
+      if (!isOrgWide) {
+        const [hasTeamAccess, hasPersonalAccess] = await Promise.all([
+          McpServerModel.userHasMcpServerAccessByTeam(userId, id),
+          McpServerUserModel.userHasPersonalMcpServerAccess(userId, id),
+        ]);
 
-      if (!hasTeamAccess && !hasPersonalAccess) {
-        return null;
+        if (!hasTeamAccess && !hasPersonalAccess) {
+          return null;
+        }
       }
     }
 
@@ -610,6 +628,7 @@ class McpServerModel {
           eq(schema.mcpServersTable.catalogId, catalogId),
           eq(schema.mcpServersTable.ownerId, userId),
           isNull(schema.mcpServersTable.teamId), // Personal = no team
+          eq(schema.mcpServersTable.isOrgWide, false), // Exclude org-wide
         ),
       )
       .limit(1);
@@ -637,6 +656,7 @@ class McpServerModel {
           inArray(schema.mcpServersTable.catalogId, catalogIds),
           eq(schema.mcpServersTable.ownerId, userId),
           isNull(schema.mcpServersTable.teamId), // Personal = no team
+          eq(schema.mcpServersTable.isOrgWide, false), // Exclude org-wide
         ),
       );
 
@@ -648,6 +668,31 @@ class McpServerModel {
     }
 
     return serversByCatalog;
+  }
+
+  /**
+   * Get all org-wide MCP server IDs.
+   */
+  private static async getOrgWideMcpServerIds(): Promise<string[]> {
+    const results = await db
+      .select({ id: schema.mcpServersTable.id })
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.isOrgWide, true));
+
+    return results.map((r) => r.id);
+  }
+
+  /**
+   * Check if a specific MCP server is org-wide.
+   */
+  private static async isOrgWideServer(id: string): Promise<boolean> {
+    const [result] = await db
+      .select({ isOrgWide: schema.mcpServersTable.isOrgWide })
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.id, id))
+      .limit(1);
+
+    return result?.isOrgWide === true;
   }
 
   /**

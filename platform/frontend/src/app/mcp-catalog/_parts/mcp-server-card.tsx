@@ -6,24 +6,25 @@ import {
   type McpDeploymentStatusEntry,
 } from "@shared";
 import {
-  AlertTriangle,
+  Bot,
+  Building2,
+  CheckCircle2,
   Code,
   FileText,
   Info,
+  Link2,
   MoreVertical,
   Pencil,
   RefreshCw,
+  Route,
   Trash2,
+  Unlink,
   User,
   Users,
-  Wrench,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LabelTags } from "@/components/label-tags";
-import {
-  WithoutPermissions,
-  WithPermissions,
-} from "@/components/roles/with-permissions";
+import { WithPermissions } from "@/components/roles/with-permissions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -33,14 +34,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { PermissionButton } from "@/components/ui/permission-button";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { PermissionButton } from "@/components/ui/permission-button";
+import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { useFeatureFlag } from "@/lib/features.hook";
@@ -65,6 +65,8 @@ export type CatalogItemWithOptionalLabel = CatalogItem & {
 export type InstalledServer =
   archestraApiTypes.GetMcpServersResponses["200"][number];
 
+export type InstallScope = "personal" | "team" | "org";
+
 export type McpServerCardProps = {
   item: CatalogItemWithOptionalLabel;
   installedServer?: InstalledServer | null;
@@ -77,8 +79,8 @@ export type McpServerCardProps = {
     | "discovering-tools"
     | null;
   deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
-  onInstallRemoteServer: () => void;
-  onInstallLocalServer: () => void;
+  onInstallRemoteServer: (installScope?: InstallScope) => void;
+  onInstallLocalServer: (installScope?: InstallScope) => void;
   onReinstall: () => void;
   onDetails: () => void;
   onEdit: () => void;
@@ -140,36 +142,8 @@ export function McpServerCard({
   const { data: allMcpServers } = useMcpServers();
   const { data: teams } = useTeams();
 
-  // Compute if user can create new installation (personal or team)
-  // This is used to determine if the Connect button should be shown
-  const canCreateNewInstallation = (() => {
-    if (!allMcpServers) return true; // Allow while loading
-
-    const serversForCatalog = allMcpServers.filter(
-      (s) => s.catalogId === item.id,
-    );
-
-    // Check if user has personal installation
-    const hasPersonalInstallation = serversForCatalog.some(
-      (s) => s.ownerId === currentUserId && !s.teamId,
-    );
-
-    // Check which teams already have this server
-    const teamsWithInstallation = serversForCatalog
-      .filter((s) => s.teamId)
-      .map((s) => s.teamId);
-
-    // Filter available teams
-    const availableTeams =
-      teams?.filter((t) => !teamsWithInstallation.includes(t.id)) ?? [];
-
-    // Can create new installation if:
-    // - Personal installation not yet created AND byos is not enabled
-    // - There are teams available without this server
-    return (
-      (!hasPersonalInstallation && !isByosEnabled) || availableTeams.length > 0
-    );
-  })();
+  // Fetch all profiles for assignment count computation
+  const { data: allProfiles = [] } = useProfiles();
 
   // Dialog state
   const [isToolsDialogOpen, setIsToolsDialogOpen] = useState(false);
@@ -199,10 +173,6 @@ export function McpServerCard({
     }
   };
 
-  const mcpServerOfCurrentCatalogItem = allMcpServers?.filter(
-    (s) => s.catalogId === item.id,
-  );
-
   // Aggregate all installations for this catalog item (for logs dropdown)
   let localInstalls: NonNullable<typeof allMcpServers> = [];
   if (
@@ -228,14 +198,6 @@ export function McpServerCard({
   const needsReinstall = installedServer?.reinstallRequired;
   const hasError = installedServer?.localInstallationStatus === "error";
   const errorMessage = installedServer?.localInstallationError;
-  const mcpServersCount = mcpServerOfCurrentCatalogItem?.length ?? 0;
-
-  // Check for OAuth refresh errors on any credential the user can see
-  // The backend already filters mcpServerOfCurrentCatalogItem to only include visible credentials
-  const isOAuthServer = !!item.oauthConfig;
-  const hasOAuthRefreshError =
-    isOAuthServer &&
-    (mcpServerOfCurrentCatalogItem?.some((s) => s.oauthRefreshError) ?? false);
 
   const isInstalling = Boolean(
     installingItemId === item.id ||
@@ -247,25 +209,9 @@ export function McpServerCard({
     currentUserId && installedServer?.users
       ? installedServer.users.includes(currentUserId)
       : false;
-  const toolsDiscoveredCount = tools?.length ?? 0;
-  const getToolsAssignedCount = () => {
-    if (
-      installationStatus === "pending" ||
-      installationStatus === "discovering-tools"
-    )
-      return "—";
-    return !tools
-      ? 0
-      : tools.filter((tool) => tool.assignedAgentCount > 0).length;
-  };
 
   const isRemoteVariant = variant === "remote";
   const isBuiltinVariant = variant === "builtin";
-
-  const requiresAuth = !!(
-    (item.userConfig && Object.keys(item.userConfig).length > 0) ||
-    item.oauthConfig
-  );
 
   // Check if logs are available (local variant with at least one installation)
   const hasLocalInstallations = localInstalls.length > 0;
@@ -276,25 +222,74 @@ export function McpServerCard({
     .filter((s) => s.catalogId === item.id && s.serverType === "local")
     .map((s) => s.id);
 
-  // JSX parts - Edit button (admin only) and Logs button (visible to all for local servers)
-  const editButton = (
-    <Button variant="outline" size="sm" className="flex-1 h-8" onClick={onEdit}>
-      <Pencil className="h-3 w-3 mr-1" />
-      Edit
-    </Button>
-  );
+  // --- Scope and connection computations ---
+  const itemScope = (item as Record<string, unknown>).scope as
+    | "personal"
+    | "team"
+    | "org"
+    | undefined;
+  const serversForCatalog =
+    allMcpServers?.filter((s) => s.catalogId === item.id) ?? [];
 
-  const logsButton = isLogsAvailable ? (
-    <Button
-      variant="outline"
-      size="sm"
-      className="flex-1 h-8"
-      onClick={() => setIsLogsDialogOpen(true)}
-    >
-      <FileText className="h-3 w-3 mr-1" />
-      Logs
-    </Button>
-  ) : null;
+  // Personal connection: server owned by current user without team assignment and not org-wide
+  const personalServer = serversForCatalog.find(
+    (s) =>
+      s.ownerId === currentUserId &&
+      !s.teamDetails &&
+      !(s as Record<string, unknown>).isOrgWide,
+  );
+  const isPersonalConnected = !!personalServer;
+
+  // Team connections: servers with team assignments
+  const teamServers = serversForCatalog.filter((s) => !!s.teamDetails);
+  const teamsWithInstallation = new Set(teamServers.map((s) => s.teamId));
+  const availableTeams =
+    teams?.filter((t) => !teamsWithInstallation.has(t.id)) ?? [];
+  const canAddMoreTeams = availableTeams.length > 0;
+  const connectedTeamsCount = teamServers.length;
+
+  // Org connection status
+  const orgServer = serversForCatalog.find(
+    (s) => (s as Record<string, unknown>).isOrgWide,
+  );
+  const isOrgConnected = !!orgServer;
+
+  // Scope row visibility
+  const showTeamRow =
+    (itemScope === "team" || itemScope === "org") && !isPlaywrightVariant;
+  const showOrgRow = itemScope === "org" && !isPlaywrightVariant;
+
+  // Connect handler based on variant
+  const onConnect = (installScope?: InstallScope) =>
+    isRemoteVariant
+      ? onInstallRemoteServer(installScope)
+      : onInstallLocalServer(installScope);
+
+  // --- Assignment counts ---
+  const { agentAssignmentCount, gatewayAssignmentCount } = useMemo(() => {
+    if (!tools || !allProfiles.length)
+      return { agentAssignmentCount: 0, gatewayAssignmentCount: 0 };
+
+    // Collect all unique assigned profile IDs across all tools
+    const assignedIds = new Set(
+      tools.flatMap((t) => t.assignedAgents.map((a) => a.id)),
+    );
+
+    // Build a lookup of profile ID -> agentType
+    const profileTypeMap = new Map(allProfiles.map((p) => [p.id, p.agentType]));
+
+    let agents = 0;
+    let gateways = 0;
+    for (const id of assignedIds) {
+      const type = profileTypeMap.get(id);
+      if (type === "agent") agents++;
+      else if (type === "mcp_gateway") gateways++;
+    }
+
+    return { agentAssignmentCount: agents, gatewayAssignmentCount: gateways };
+  }, [tools, allProfiles]);
+
+  // --- JSX parts ---
 
   const manageCatalogItemDropdownMenu = (
     <div className="flex flex-wrap gap-1 items-center flex-shrink-0">
@@ -305,10 +300,20 @@ export function McpServerCard({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={onEdit}>
+            <Pencil className="mr-2 h-4 w-4" />
+            Edit
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={onDetails}>
             <Info className="mr-2 h-4 w-4" />
             About
           </DropdownMenuItem>
+          {isLogsAvailable && (
+            <DropdownMenuItem onClick={() => setIsLogsDialogOpen(true)}>
+              <FileText className="mr-2 h-4 w-4" />
+              Logs
+            </DropdownMenuItem>
+          )}
           {variant === "local" && (
             <DropdownMenuItem onClick={() => setIsYamlConfigDialogOpen(true)}>
               <Code className="mr-2 h-4 w-4" />
@@ -326,155 +331,9 @@ export function McpServerCard({
     </div>
   );
 
-  const localServersInstalled = (
-    <>
-      <div className="flex items-center gap-2">
-        <User className="h-4 w-4 text-muted-foreground" />
-        <span className="text-muted-foreground">
-          Connections
-          <WithoutPermissions permissions={{ mcpServer: ["admin"] }}>
-            {" "}
-            in your team
-          </WithoutPermissions>
-          :{" "}
-          <span
-            className="font-medium text-foreground"
-            data-testid={`${E2eTestId.CredentialsCount}-${installedServer?.catalogName}`}
-          >
-            {mcpServersCount}
-          </span>
-          {hasOAuthRefreshError && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <AlertTriangle className="h-4 w-4 text-amber-500 inline-block ml-1 cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  <p className="font-medium mb-1">Authentication failed</p>
-                  <p className="text-xs text-muted-foreground">
-                    Some connections need re-authentication.
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Click Manage to fix.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-        </span>
-      </div>
-      {mcpServersCount > 0 && (
-        <Button
-          onClick={() => setIsManageUsersDialogOpen(true)}
-          size="sm"
-          variant="link"
-          className="h-7 text-xs"
-          data-testid={`${E2eTestId.ManageCredentialsButton}-${installedServer?.catalogName}`}
-        >
-          Manage
-        </Button>
-      )}
-    </>
-  );
-  const usersAuthenticated = (
-    <>
-      <div className="flex items-center gap-2">
-        <User className="h-4 w-4 text-muted-foreground" />
-        <span
-          className="text-muted-foreground"
-          data-testid={`${E2eTestId.CredentialsCount}-${installedServer?.catalogName}`}
-        >
-          Connections
-          <WithoutPermissions permissions={{ mcpServer: ["admin"] }}>
-            {" "}
-            in your team
-          </WithoutPermissions>
-          :{" "}
-          <span className="font-medium text-foreground">{mcpServersCount}</span>
-          {hasOAuthRefreshError && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <AlertTriangle className="h-4 w-4 text-amber-500 inline-block ml-1 cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  <p className="font-medium mb-1">Authentication failed</p>
-                  <p className="text-xs text-muted-foreground">
-                    Some connections need re-authentication.
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Click Manage to fix.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-        </span>
-      </div>
-      {mcpServersCount > 0 && (
-        <Button
-          onClick={() => setIsManageUsersDialogOpen(true)}
-          size="sm"
-          variant="link"
-          className="h-7 text-xs"
-        >
-          Manage
-        </Button>
-      )}
-    </>
-  );
-
-  const assignedCount = getToolsAssignedCount();
-  const isZeroAssignments = assignedCount === 0 && toolsDiscoveredCount > 0;
-
-  const toolsAssigned = (
-    <>
-      <div className="flex items-center gap-2">
-        <Wrench className="h-4 w-4 text-muted-foreground" />
-        <span className="text-muted-foreground">
-          Assignments:{" "}
-          <span className="font-medium text-foreground">
-            {assignedCount}
-            {toolsDiscoveredCount ? `/${toolsDiscoveredCount}` : ""}
-          </span>
-        </span>
-      </div>
-      {toolsDiscoveredCount > 0 && (
-        <Button
-          onClick={() => setIsToolsDialogOpen(true)}
-          size="sm"
-          variant="link"
-          className="h-7 text-xs gap-1"
-          data-testid={`${E2eTestId.ManageToolsButton}-${installedServer?.catalogName}`}
-        >
-          {isZeroAssignments && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div>
-                    <AlertTriangle className="h-4 w-4 text-amber-500 relative top-[-1px]" />
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>
-                    Click "Manage" button in order to assign tools to MCP
-                    Gateways and Agents
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-          Manage
-        </Button>
-      )}
-    </>
-  );
-
-  const shouldShowErrorBanner = hasError;
-
   // Show error banner with links to logs and edit dialog (hide during reinstall)
   const errorBanner = isCurrentUserAuthenticated &&
-    shouldShowErrorBanner &&
+    hasError &&
     errorMessage &&
     !isInstalling && (
       <div
@@ -503,265 +362,238 @@ export function McpServerCard({
       </div>
     );
 
-  const remoteCardContent = (
-    <>
-      <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
-          {usersAuthenticated}
-        </div>
-        <WithPermissions
-          permissions={{ tool: ["update"], agent: ["update"] }}
-          noPermissionHandle="hide"
-        >
-          <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
-            {toolsAssigned}
-          </div>
-        </WithPermissions>
-      </div>
-      {errorBanner}
-      {/* Show reconnect button only when NOT installing */}
-      {isCurrentUserAuthenticated &&
-        (needsReinstall || hasError) &&
-        !isInstalling && (
-          <PermissionButton
-            permissions={{ mcpServer: ["update"] }}
-            onClick={onReinstall}
-            size="sm"
-            variant="default"
-            className="w-full"
-          >
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Reconnect Required
-          </PermissionButton>
-        )}
-      {/* Spacer + action buttons + Connect button pinned to bottom */}
-      <div className="mt-auto flex flex-col gap-2">
-        <div className="flex gap-1">
-          {userIsMcpServerAdmin && editButton}
-          {logsButton}
-        </div>
-        {!isInstalling && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="w-full">
-                  <PermissionButton
-                    permissions={{ mcpServer: ["create"] }}
-                    onClick={onInstallRemoteServer}
-                    disabled={isInstalling || !canCreateNewInstallation}
-                    size="sm"
-                    variant="outline"
-                    className="w-full"
-                  >
-                    <User className="mr-2 h-4 w-4" />
-                    {isInstalling ? "Connecting..." : "Connect"}
-                  </PermissionButton>
-                </div>
-              </TooltipTrigger>
-              {!canCreateNewInstallation && (
-                <TooltipContent side="bottom">
-                  <p>All connect options exhausted (personal and all teams)</p>
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
-        )}
-      </div>
-    </>
-  );
-
-  const localCardContent = (
-    <>
-      <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
-          {localServersInstalled}
-        </div>
-        <WithPermissions
-          permissions={{ tool: ["update"], agent: ["update"] }}
-          noPermissionHandle="hide"
-        >
-          <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
-            {toolsAssigned}
-          </div>
-        </WithPermissions>
-      </div>
-      {errorBanner}
-      {/* Show reinstall button only when NOT installing (hide during reinstall to show progress bar) */}
-      {isCurrentUserAuthenticated && needsReinstall && !isInstalling && (
-        <PermissionButton
-          permissions={{ mcpServer: ["update"] }}
-          onClick={onReinstall}
-          size="sm"
-          variant="default"
-          className="w-full"
-        >
-          <RefreshCw className="mr-2 h-4 w-4" />
-          Reinstall Required
-        </PermissionButton>
-      )}
-      {/* Spacer + action buttons + Connect button pinned to bottom */}
-      <div className="mt-auto flex flex-col gap-2">
-        <div className="flex gap-1">
-          {userIsMcpServerAdmin && editButton}
-          {logsButton}
-        </div>
-        {/* Show Connect button when user can create new installation */}
-        {!isInstalling && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="w-full">
-                  <PermissionButton
-                    permissions={{ mcpServer: ["create"] }}
-                    onClick={onInstallLocalServer}
-                    disabled={!isLocalMcpEnabled || !canCreateNewInstallation}
-                    size="sm"
-                    variant="outline"
-                    className="w-full"
-                    data-testid={`${E2eTestId.ConnectCatalogItemButton}-${item.name}`}
-                  >
-                    <User className="mr-2 h-4 w-4" />
-                    Connect
-                  </PermissionButton>
-                </div>
-              </TooltipTrigger>
-              {(!isLocalMcpEnabled || !canCreateNewInstallation) && (
-                <TooltipContent side="bottom">
-                  <p>
-                    {!isLocalMcpEnabled
-                      ? LOCAL_MCP_DISABLED_MESSAGE
-                      : "All connect options exhausted (personal and all teams)"}
-                  </p>
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
-        )}
-        {/* Show progress bar during installation or reinstallation */}
-        {isInstalling && (
-          <InstallationProgress
-            status={
-              installationStatus === "pending" ||
-              installationStatus === "discovering-tools"
-                ? installationStatus
-                : "pending"
-            }
-            serverId={installedServer?.id}
-            serverName={installedServer?.name}
-          />
-        )}
-      </div>
-    </>
-  );
-
-  const playwrightCardContent = (
-    <>
-      <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
-          {localServersInstalled}
-        </div>
-        <WithPermissions
-          permissions={{ tool: ["update"], agent: ["update"] }}
-          noPermissionHandle="hide"
-        >
-          <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
-            {toolsAssigned}
-          </div>
-        </WithPermissions>
-      </div>
-      {errorBanner}
-      {/* Show reinstall button only when NOT installing */}
-      {isCurrentUserAuthenticated && needsReinstall && !isInstalling && (
-        <PermissionButton
-          permissions={{ mcpServer: ["update"] }}
-          onClick={onReinstall}
-          size="sm"
-          variant="default"
-          className="w-full"
-        >
-          <RefreshCw className="mr-2 h-4 w-4" />
-          Reinstall Required
-        </PermissionButton>
-      )}
-      {/* Spacer + action buttons + Connect/Uninstall button pinned to bottom */}
-      <div className="mt-auto flex flex-col gap-2">
-        <div className="flex gap-1">
-          {userIsMcpServerAdmin && editButton}
-          {logsButton}
-        </div>
-        {!isInstalling && isCurrentUserAuthenticated && installedServer && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            onClick={() => {
-              setUninstallingServer({
-                id: installedServer.id,
-                name: installedServer.name,
-              });
-            }}
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Disconnect
-          </Button>
-        )}
-        {!isInstalling && !isCurrentUserAuthenticated && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="w-full">
-                  <PermissionButton
-                    permissions={{ mcpServer: ["create"] }}
-                    onClick={onInstallLocalServer}
-                    disabled={!isLocalMcpEnabled}
-                    size="sm"
-                    variant="outline"
-                    className="w-full"
-                    data-testid={`${E2eTestId.ConnectCatalogItemButton}-${item.name}`}
-                  >
-                    <User className="mr-2 h-4 w-4" />
-                    Connect
-                  </PermissionButton>
-                </div>
-              </TooltipTrigger>
-              {!isLocalMcpEnabled && (
-                <TooltipContent side="bottom">
-                  <p>{LOCAL_MCP_DISABLED_MESSAGE}</p>
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
-        )}
-        {/* Show progress bar during installation or reinstallation */}
-        {isInstalling && (
-          <InstallationProgress
-            status={
-              installationStatus === "pending" ||
-              installationStatus === "discovering-tools"
-                ? installationStatus
-                : "pending"
-            }
-            serverId={installedServer?.id}
-            serverName={installedServer?.name}
-          />
-        )}
-      </div>
-    </>
-  );
-
-  const builtinCardContent = (
-    <>
-      <WithPermissions
-        permissions={{ tool: ["update"], agent: ["update"] }}
-        noPermissionHandle="hide"
+  // Link icon button for connecting
+  const connectButton = (testId?: string, installScope?: InstallScope) => {
+    const isLocalDisabled = variant === "local" && !isLocalMcpEnabled;
+    return (
+      <PermissionButton
+        permissions={{ mcpServer: ["create"] }}
+        onClick={() => onConnect(installScope)}
+        disabled={isLocalDisabled}
+        size="icon"
+        variant="ghost"
+        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+        data-testid={testId}
       >
-        <div className="bg-muted/50 rounded-md overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between px-3 py-2 text-sm border-b border-muted h-10">
-            {toolsAssigned}
+        <Link2 className="h-4 w-4" />
+      </PermissionButton>
+    );
+  };
+
+  // Unlink icon button for disconnecting
+  const revokeButton = (server: { id: string; name: string }) => (
+    <button
+      type="button"
+      className="h-8 w-8 inline-flex items-center justify-center text-muted-foreground/40 hover:text-destructive transition-colors"
+      onClick={() => setUninstallingServer(server)}
+    >
+      <Unlink className="h-4 w-4" />
+    </button>
+  );
+
+  // Scope row helper
+  const scopeRow = ({
+    connected,
+    icon: Icon,
+    title,
+    right,
+    key,
+  }: {
+    connected: boolean;
+    icon: React.ComponentType<{ className?: string }>;
+    title: string;
+    right: React.ReactNode;
+    key?: string;
+  }) => (
+    <div
+      key={key}
+      className={`flex items-center gap-2.5 px-2 py-1.5 rounded-lg ${connected ? "bg-green-50 dark:bg-green-950/20" : ""}`}
+    >
+      {connected && (
+        <CheckCircle2 className="h-6 w-6 text-green-600 shrink-0" />
+      )}
+      <Icon
+        className={`h-4 w-4 shrink-0 ${connected ? "text-foreground" : "text-muted-foreground"}`}
+      />
+      <span
+        className={`text-sm font-medium min-w-0 flex-1 ${connected ? "text-foreground" : "text-muted-foreground"}`}
+      >
+        {title}
+      </span>
+      <div className="shrink-0">{right}</div>
+    </div>
+  );
+
+  // --- Scope connection rows ---
+  const scopeConnectionRows = (!isBuiltinVariant || isPlaywrightVariant) && (
+    <div className="flex flex-col">
+      {/* Personal row */}
+      {scopeRow({
+        connected: isPersonalConnected,
+        icon: User,
+        title: "Personal",
+        right:
+          isPersonalConnected && personalServer
+            ? revokeButton(personalServer)
+            : !isInstalling && !isByosEnabled
+              ? connectButton(
+                  `${E2eTestId.ConnectCatalogItemButton}-${item.name}`,
+                  "personal",
+                )
+              : null,
+      })}
+
+      {/* Team row with badges + connect + manage */}
+      {showTeamRow && (
+        <div
+          className={`flex items-center gap-2.5 px-2 py-1.5 rounded-lg ${connectedTeamsCount > 0 ? "bg-green-50 dark:bg-green-950/20" : ""}`}
+        >
+          {connectedTeamsCount > 0 && (
+            <CheckCircle2 className="h-6 w-6 text-green-600 shrink-0" />
+          )}
+          <Users
+            className={`h-4 w-4 shrink-0 ${connectedTeamsCount > 0 ? "text-foreground" : "text-muted-foreground"}`}
+          />
+          {connectedTeamsCount > 0 ? (
+            <div className="flex items-center gap-1 min-w-0 flex-1 overflow-hidden">
+              {teamServers.slice(0, 2).map((ts) => (
+                <Badge
+                  key={ts.id}
+                  variant="secondary"
+                  className="bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 shrink-0"
+                >
+                  {ts.teamDetails?.name ?? "Team"}
+                </Badge>
+              ))}
+              {connectedTeamsCount > 2 && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button type="button" className="cursor-pointer">
+                      <Badge
+                        variant="secondary"
+                        className="bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 shrink-0 hover:bg-green-200 dark:hover:bg-green-900/60 transition-all hover:scale-110"
+                      >
+                        +{connectedTeamsCount - 2}
+                      </Badge>
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-72 p-0">
+                    <div className="flex items-center justify-between px-4 pt-3 pb-2">
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-sm font-semibold">Teams</span>
+                        <span className="text-sm text-muted-foreground">
+                          {connectedTeamsCount}/{teams?.length ?? 0} connected
+                        </span>
+                      </div>
+                    </div>
+                    <div className="border-t" />
+                    <div className="flex flex-col gap-1 p-2">
+                      {teamServers.map((ts) => (
+                        <div
+                          key={ts.id}
+                          className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg bg-green-50 dark:bg-green-950/20"
+                        >
+                          <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+                          <span className="text-sm font-medium text-green-800 dark:text-green-300 flex-1">
+                            {ts.teamDetails?.name ?? "Team"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )}
+            </div>
+          ) : (
+            <span className="text-sm font-medium min-w-0 flex-1 text-muted-foreground">
+              Team
+            </span>
+          )}
+          <div className="flex items-center gap-1 shrink-0">
+            {!isInstalling &&
+              canAddMoreTeams &&
+              connectButton(undefined, "team")}
+            {connectedTeamsCount > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="h-8 w-8 inline-flex items-center justify-center text-muted-foreground/40 hover:text-destructive transition-colors"
+                  >
+                    <Unlink className="h-4 w-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {teamServers.map((ts) => (
+                    <DropdownMenuItem
+                      key={ts.id}
+                      onClick={() =>
+                        setUninstallingServer({
+                          id: ts.id,
+                          name: ts.name,
+                        })
+                      }
+                      className="text-destructive"
+                    >
+                      <Unlink className="mr-2 h-4 w-4" />
+                      {ts.teamDetails?.name ?? "Team"}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
-      </WithPermissions>
-    </>
+      )}
+
+      {showOrgRow &&
+        scopeRow({
+          connected: isOrgConnected,
+          icon: Building2,
+          title: "Organization",
+          right:
+            isOrgConnected && orgServer
+              ? revokeButton(orgServer)
+              : !isInstalling
+                ? connectButton(undefined, "org")
+                : null,
+        })}
+    </div>
+  );
+
+  // --- Bottom action buttons (horizontal) ---
+  const actionButtons = (
+    <WithPermissions
+      permissions={{ tool: ["update"], agent: ["update"] }}
+      noPermissionHandle="hide"
+    >
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="flex-1 text-muted-foreground"
+          onClick={() => setIsToolsDialogOpen(true)}
+        >
+          <Bot className="h-4 w-4 mr-1.5" />
+          Agents
+          <Badge variant="secondary" className="ml-1.5 px-1.5 py-0 text-xs">
+            {agentAssignmentCount}
+          </Badge>
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="flex-1 text-muted-foreground"
+          onClick={() => setIsToolsDialogOpen(true)}
+        >
+          <Route className="h-4 w-4 mr-1.5" />
+          MCP Gateways
+          <Badge variant="secondary" className="ml-1.5 px-1.5 py-0 text-xs">
+            {gatewayAssignmentCount}
+          </Badge>
+        </Button>
+      </div>
+    </WithPermissions>
   );
 
   const dialogs = (
@@ -805,7 +637,7 @@ export function McpServerCard({
 
   return (
     <Card
-      className="flex flex-col relative pt-4 gap-4 h-full"
+      className="flex flex-col relative pt-4 gap-2 h-full"
       data-testid={`${E2eTestId.McpServerCard}-${item.name}`}
     >
       <CardHeader className="gap-0">
@@ -823,48 +655,7 @@ export function McpServerCard({
                 deploymentStatuses={deploymentStatuses}
               />
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              {(isBuiltinVariant || isPlaywrightVariant) && (
-                <Badge
-                  variant="secondary"
-                  className="text-xs bg-purple-600 text-white"
-                >
-                  Built-in
-                </Badge>
-              )}
-              <Badge
-                variant="outline"
-                className={`text-xs text-white ${isRemoteVariant ? "bg-blue-700" : "bg-emerald-700"}`}
-              >
-                {isRemoteVariant ? "Remote" : "Local"}
-              </Badge>
-              {(() => {
-                const itemScope = (item as Record<string, unknown>).scope as
-                  | string
-                  | undefined;
-                const itemTeams = (item as Record<string, unknown>).teams as
-                  | Array<{ id: string; name: string }>
-                  | undefined;
-                if (itemScope === "personal") {
-                  return (
-                    <Badge variant="outline" className="text-xs gap-1">
-                      <User className="h-3 w-3" />
-                      Personal
-                    </Badge>
-                  );
-                }
-                if (itemScope === "team" && itemTeams && itemTeams.length > 0) {
-                  return (
-                    <Badge variant="outline" className="text-xs gap-1">
-                      <Users className="h-3 w-3" />
-                      {itemTeams.length === 1
-                        ? itemTeams[0].name
-                        : `${itemTeams.length} teams`}
-                    </Badge>
-                  );
-                }
-                return null;
-              })()}
+            <div className="flex items-center gap-2 flex-wrap min-h-[1.5rem]">
               {item.labels && item.labels.length > 0 && (
                 <LabelTags labels={item.labels} />
               )}
@@ -874,13 +665,49 @@ export function McpServerCard({
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 flex-grow">
-        {isBuiltinVariant
-          ? builtinCardContent
-          : isPlaywrightVariant
-            ? playwrightCardContent
-            : isRemoteVariant
-              ? remoteCardContent
-              : localCardContent}
+        {/* Scope connection rows */}
+        {scopeConnectionRows}
+
+        {/* Error banner */}
+        {errorBanner}
+
+        {/* Reconnect/reinstall button */}
+        {isCurrentUserAuthenticated &&
+          (needsReinstall || hasError) &&
+          !isInstalling && (
+            <PermissionButton
+              permissions={{ mcpServer: ["update"] }}
+              onClick={onReinstall}
+              size="sm"
+              variant="default"
+              className="w-full"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              {needsReinstall && !hasError
+                ? "Reinstall Required"
+                : "Reconnect Required"}
+            </PermissionButton>
+          )}
+
+        {/* Installation progress */}
+        {isInstalling && (
+          <InstallationProgress
+            status={
+              installationStatus === "pending" ||
+              installationStatus === "discovering-tools"
+                ? installationStatus
+                : "pending"
+            }
+            serverId={installedServer?.id}
+            serverName={installedServer?.name}
+          />
+        )}
+
+        {/* Action buttons pinned to bottom */}
+        <div className="mt-auto">
+          <div className="border-t mb-3" />
+          {actionButtons}
+        </div>
       </CardContent>
       {dialogs}
     </Card>

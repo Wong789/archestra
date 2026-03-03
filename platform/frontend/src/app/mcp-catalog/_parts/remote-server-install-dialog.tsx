@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useFeatureFlag } from "@/lib/features.hook";
+import type { InstallScope } from "./mcp-server-card";
 import { SelectMcpServerCredentialTypeAndTeams } from "./select-mcp-server-credential-type-and-teams";
 
 const InlineVaultSecretSelector = lazy(
@@ -49,6 +50,8 @@ export interface RemoteServerInstallResult {
   teamId?: string | null;
   /** Whether metadata contains BYOS vault references in path#key format */
   isByosVault?: boolean;
+  /** Whether this is an org-wide installation */
+  isOrgWide?: boolean;
 }
 
 interface RemoteServerInstallDialogProps {
@@ -60,6 +63,7 @@ interface RemoteServerInstallDialogProps {
   ) => Promise<void>;
   catalogItem: CatalogItem | null;
   isInstalling: boolean;
+  installScope?: InstallScope;
 }
 
 export function RemoteServerInstallDialog({
@@ -68,6 +72,7 @@ export function RemoteServerInstallDialog({
   onConfirm,
   catalogItem,
   isInstalling,
+  installScope,
 }: RemoteServerInstallDialogProps) {
   const [configValues, setConfigValues] = useState<Record<string, string>>({});
 
@@ -146,6 +151,7 @@ export function RemoteServerInstallDialog({
         metadata,
         teamId: selectedTeamId,
         isByosVault: useVaultSecrets,
+        isOrgWide: installScope === "org",
       });
       resetForm();
       onClose();
@@ -232,6 +238,7 @@ export function RemoteServerInstallDialog({
               catalogId={catalogItem?.id}
               onCredentialTypeChange={setCredentialType}
               onCanInstallChange={setCanInstall}
+              installScope={installScope}
             />
 
             {canInstall && hasOAuth && (

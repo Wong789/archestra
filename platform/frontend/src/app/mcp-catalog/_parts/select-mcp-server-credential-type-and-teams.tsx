@@ -36,6 +36,8 @@ interface SelectMcpServerCredentialTypeAndTeamsProps {
   personalOnly?: boolean;
   /** Callback when install availability changes (false when user lacks all options) */
   onCanInstallChange?: (canInstall: boolean) => void;
+  /** When set, scopes the selector to a specific install context */
+  installScope?: "personal" | "team" | "org";
 }
 
 export function SelectMcpServerCredentialTypeAndTeams({
@@ -46,6 +48,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
   existingTeamId,
   personalOnly = false,
   onCanInstallChange,
+  installScope,
 }: SelectMcpServerCredentialTypeAndTeamsProps) {
   const { data: teams, isLoading: isLoadingTeams } = useTeams();
   const byosEnabled = useFeatureFlag("byosEnabled");
@@ -71,7 +74,10 @@ export function SelectMcpServerCredentialTypeAndTeams({
     );
 
     const hasPersonal = serversForCatalog.some(
-      (s) => s.ownerId === currentUserId && !s.teamId,
+      (s) =>
+        s.ownerId === currentUserId &&
+        !s.teamId &&
+        !(s as Record<string, unknown>).isOrgWide,
     );
 
     const teamsWithInstall = serversForCatalog
@@ -191,6 +197,52 @@ export function SelectMcpServerCredentialTypeAndTeams({
     }
   };
 
+  // Scope-aware: for "personal" and "org" scopes, auto-select personal and render nothing
+  useEffect(() => {
+    if (installScope === "personal" || installScope === "org") {
+      onCredentialTypeChange?.("personal");
+      onTeamChange(null);
+      onCanInstallChange?.(true);
+    }
+  }, [installScope, onCredentialTypeChange, onTeamChange, onCanInstallChange]);
+
+  // Scope-aware: for "team" scope, auto-select first available team
+  useEffect(() => {
+    if (installScope === "team" && availableTeams.length > 0) {
+      const firstTeamId = availableTeams[0].id;
+      setSelectedValue(firstTeamId);
+      onCredentialTypeChange?.("team");
+      onTeamChange(firstTeamId);
+      onCanInstallChange?.(true);
+    }
+  }, [
+    installScope,
+    availableTeams,
+    onCredentialTypeChange,
+    onTeamChange,
+    onCanInstallChange,
+  ]);
+
+  // For personal/org scope, skip the selector entirely
+  if (installScope === "personal" || installScope === "org") {
+    return null;
+  }
+
+  // For team scope with no available teams, show the "already installed" alert
+  if (installScope === "team" && availableTeams.length === 0) {
+    return (
+      <Alert>
+        <AlertTriangle className="!text-amber-500 h-4 w-4" />
+        <AlertDescription>
+          <span className="font-semibold">Already installed</span>
+          <p className="mt-1">
+            This MCP server is already installed for all available teams.
+          </p>
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
   if (!canInstall) {
     return (
       <Alert>
@@ -223,6 +275,39 @@ export function SelectMcpServerCredentialTypeAndTeams({
           )}
         </AlertDescription>
       </Alert>
+    );
+  }
+
+  // For team scope, render only the team dropdown (no "Myself" option)
+  if (installScope === "team") {
+    return (
+      <div className="space-y-2">
+        <Label>Select Team</Label>
+        <Select
+          value={selectedValue}
+          onValueChange={handleValueChange}
+          disabled={isLoadingTeams}
+        >
+          <SelectTrigger
+            data-testid={E2eTestId.SelectCredentialTypeTeamDropdown}
+          >
+            <SelectValue
+              placeholder={isLoadingTeams ? "Loading..." : "Select a team"}
+            />
+          </SelectTrigger>
+          <SelectContent>
+            {availableTeams.map((team) => (
+              <SelectItem key={team.id} value={team.id}>
+                {team.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          Any team member can select this connection when assigning tools to
+          agents and MCP gateways.
+        </p>
+      </div>
     );
   }
 

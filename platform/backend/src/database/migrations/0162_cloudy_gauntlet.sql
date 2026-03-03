@@ -1,0 +1,1 @@
+ALTER TABLE "mcp_server" ADD COLUMN "is_org_wide" boolean DEFAULT false NOT NULL;

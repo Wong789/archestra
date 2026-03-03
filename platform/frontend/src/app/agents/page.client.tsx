@@ -5,9 +5,9 @@ import { archestraApiSdk, E2eTestId } from "@shared";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
+  Building2,
   ChevronDown,
   ChevronUp,
-  Globe,
   Plus,
   Search,
   User,
@@ -114,7 +114,7 @@ function VisibilityBadge({
   if (scope === "org") {
     return (
       <Badge variant="secondary" className="text-xs gap-1">
-        <Globe className="h-3 w-3" />
+        <Building2 className="h-3 w-3" />
         Organization
       </Badge>
     );

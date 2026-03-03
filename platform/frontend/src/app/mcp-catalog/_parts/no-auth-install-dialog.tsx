@@ -21,6 +21,8 @@ type CatalogItem =
 export interface NoAuthInstallResult {
   /** Team ID to assign the MCP server to (null for personal) */
   teamId?: string | null;
+  /** Whether this is an org-wide installation */
+  isOrgWide?: boolean;
 }
 
 interface NoAuthInstallDialogProps {
@@ -29,6 +31,7 @@ interface NoAuthInstallDialogProps {
   onInstall: (result: NoAuthInstallResult) => Promise<void>;
   catalogItem: CatalogItem | null;
   isInstalling: boolean;
+  installScope?: "personal" | "team" | "org";
 }
 
 export function NoAuthInstallDialog({
@@ -37,13 +40,17 @@ export function NoAuthInstallDialog({
   onInstall,
   catalogItem,
   isInstalling,
+  installScope,
 }: NoAuthInstallDialogProps) {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [canInstall, setCanInstall] = useState(true);
 
   const handleInstall = useCallback(async () => {
-    await onInstall({ teamId: selectedTeamId });
-  }, [onInstall, selectedTeamId]);
+    await onInstall({
+      teamId: selectedTeamId,
+      isOrgWide: installScope === "org",
+    });
+  }, [onInstall, selectedTeamId, installScope]);
 
   const handleClose = useCallback(() => {
     setSelectedTeamId(null);
@@ -74,6 +81,7 @@ export function NoAuthInstallDialog({
               onTeamChange={setSelectedTeamId}
               catalogId={catalogItem?.id}
               onCanInstallChange={setCanInstall}
+              installScope={installScope}
             />
           </div>
 

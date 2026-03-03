@@ -96,6 +96,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           isByosVault: z.boolean().optional(),
           // Kubernetes service account override for local MCP servers
           serviceAccount: z.string().optional(),
+          // When true, installs the server org-wide (admin only)
+          isOrgWide: z.boolean().optional(),
         }),
         response: constructResponseSchema(SelectMcpServerSchema),
       },
@@ -109,10 +111,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userConfigValues,
         environmentValues,
         serviceAccount,
+        isOrgWide,
         ...restDataFromRequestBody
       } = body;
       const serverData: typeof restDataFromRequestBody & {
         serverType: InternalMcpCatalogServerType;
+        isOrgWide?: boolean;
       } = {
         ...restDataFromRequestBody,
         serverType: "local",
@@ -151,11 +155,34 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         serverData.serverType = catalogItem.serverType;
 
         // Reject personal installations when Readonly Vault is enabled
-        if (isByosEnabled() && !serverData.teamId) {
+        if (isByosEnabled() && !serverData.teamId && !isOrgWide) {
           throw new ApiError(
             400,
             "Personal MCP server installations are not allowed when Readonly Vault is enabled. Please select a team.",
           );
+        }
+
+        // Validate org-wide installations
+        if (isOrgWide) {
+          const { success: hasAdminPermission } = await hasPermission(
+            { mcpServer: ["admin"] },
+            headers,
+          );
+          if (!hasAdminPermission) {
+            throw new ApiError(
+              403,
+              "Only admins can create org-wide MCP server installations",
+            );
+          }
+          if (isPlaywrightCatalogItem(serverData.catalogId)) {
+            throw new ApiError(
+              400,
+              "Playwright browser preview cannot be installed org-wide",
+            );
+          }
+          // Org-wide servers have no team and no personal owner assignment
+          serverData.teamId = undefined;
+          serverData.isOrgWide = true;
         }
 
         // Validate permissions for team installations
@@ -203,11 +230,20 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           serverData.catalogId,
         );
 
-        // Check for duplicate personal installation (same user, no team)
+        // Check for duplicate org-wide installation
         // Return existing server instead of erroring (idempotent behavior)
-        if (!serverData.teamId) {
+        if (serverData.isOrgWide) {
+          const existingOrg = existingServers.find((s) => s.isOrgWide);
+          if (existingOrg) {
+            return reply.send(existingOrg);
+          }
+        }
+
+        // Check for duplicate personal installation (same user, no team, not org-wide)
+        // Return existing server instead of erroring (idempotent behavior)
+        if (!serverData.teamId && !serverData.isOrgWide) {
           const existingPersonal = existingServers.find(
-            (s) => s.ownerId === user.id && !s.teamId,
+            (s) => s.ownerId === user.id && !s.teamId && !s.isOrgWide,
           );
           if (existingPersonal) {
             // If agentIds provided, assign the server's tools to those agents

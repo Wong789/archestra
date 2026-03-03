@@ -110,9 +110,11 @@ export function TokenSelect({
               >
                 <div className="flex flex-col gap-1">
                   <div className="flex gap-1 flex-wrap text-xs">
-                    {server.teamDetails
-                      ? server.teamDetails.name
-                      : server.ownerEmail || "Deleted user"}
+                    {(server as Record<string, unknown>).isOrgWide
+                      ? "Organization"
+                      : server.teamDetails
+                        ? server.teamDetails.name
+                        : server.ownerEmail || "Deleted user"}
                   </div>
                 </div>
               </SelectItem>

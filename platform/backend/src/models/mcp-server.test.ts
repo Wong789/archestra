@@ -163,5 +163,92 @@ describe("McpServerModel", () => {
       expect(matching).toHaveLength(1);
       expect(matching[0].users).toHaveLength(3);
     });
+
+    test("org-wide servers are visible to all non-admin users", async ({
+      makeMcpServer,
+      makeUser,
+    }) => {
+      const user = await makeUser();
+      // Create an org-wide server (not owned by user, no team)
+      const orgServer = await makeMcpServer({ isOrgWide: true });
+
+      // User should see the org-wide server even without team/personal access
+      const servers = await McpServerModel.findAll(user.id, false);
+      const found = servers.find((s) => s.id === orgServer.id);
+      expect(found).toBeDefined();
+      expect(found?.isOrgWide).toBe(true);
+    });
+  });
+
+  describe("findById", () => {
+    test("org-wide servers are accessible without team or personal access", async ({
+      makeMcpServer,
+      makeUser,
+    }) => {
+      const user = await makeUser();
+      const orgServer = await makeMcpServer({ isOrgWide: true });
+
+      // User should be able to access org-wide server by ID
+      const found = await McpServerModel.findById(orgServer.id, user.id, false);
+      expect(found).toBeDefined();
+      expect(found?.id).toBe(orgServer.id);
+      expect(found?.isOrgWide).toBe(true);
+    });
+
+    test("non-org-wide servers are NOT accessible without team or personal access", async ({
+      makeMcpServer,
+      makeUser,
+    }) => {
+      const user = await makeUser();
+      const server = await makeMcpServer();
+
+      // User without any access should NOT see the server
+      const found = await McpServerModel.findById(server.id, user.id, false);
+      expect(found).toBeNull();
+    });
+  });
+
+  describe("constructServerName", () => {
+    test("uses -org suffix for org-wide local servers", () => {
+      const name = McpServerModel.constructServerName({
+        baseName: "my-server",
+        serverType: "local",
+        ownerId: null,
+        teamId: null,
+        isOrgWide: true,
+      });
+      expect(name).toBe("my-server-org");
+    });
+
+    test("uses ownerId suffix for personal local servers", () => {
+      const name = McpServerModel.constructServerName({
+        baseName: "my-server",
+        serverType: "local",
+        ownerId: "user-123",
+        teamId: null,
+      });
+      expect(name).toBe("my-server-user-123");
+    });
+
+    test("uses teamId suffix for team local servers", () => {
+      const name = McpServerModel.constructServerName({
+        baseName: "my-server",
+        serverType: "local",
+        ownerId: null,
+        teamId: "team-456",
+      });
+      expect(name).toBe("my-server-team-456");
+    });
+
+    test("returns baseName for remote servers regardless of flags", () => {
+      const name = McpServerModel.constructServerName({
+        baseName: "my-server",
+        serverType: "remote",
+        ownerId: "user-123",
+        teamId: "team-456",
+        isOrgWide: true,
+      });
+      expect(name).toBe("my-server");
+    });
   });
 });

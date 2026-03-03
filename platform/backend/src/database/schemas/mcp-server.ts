@@ -43,6 +43,7 @@ const mcpServerTable = pgTable("mcp_server", {
   teamId: text("team_id").references(() => team.id, {
     onDelete: "set null",
   }),
+  isOrgWide: boolean("is_org_wide").notNull().default(false),
   reinstallRequired: boolean("reinstall_required").notNull().default(false),
   localInstallationStatus: text("local_installation_status")
     .notNull()

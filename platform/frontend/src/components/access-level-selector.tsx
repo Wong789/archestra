@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckIcon, ChevronDown, Globe, User, Users } from "lucide-react";
+import { Building2, CheckIcon, ChevronDown, User, Users } from "lucide-react";
 import { useState } from "react";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
@@ -31,7 +31,7 @@ function getScopeOptions(resourceLabel: string) {
       value: "org" as const,
       label: "Organization",
       description: `Anyone in your org can access this ${resourceLabel}`,
-      icon: Globe,
+      icon: Building2,
     },
   ];
 }

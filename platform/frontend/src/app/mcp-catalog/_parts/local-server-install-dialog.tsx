@@ -29,6 +29,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { useFeatureFlag } from "@/lib/features.hook";
+import type { InstallScope } from "./mcp-server-card";
 import { SelectMcpServerCredentialTypeAndTeams } from "./select-mcp-server-credential-type-and-teams";
 import { ServiceAccountField } from "./service-account-field";
 
@@ -73,6 +74,8 @@ export interface LocalServerInstallResult {
   isByosVault?: boolean;
   /** Kubernetes service account for the MCP server pod */
   serviceAccount?: string;
+  /** Whether this is an org-wide installation */
+  isOrgWide?: boolean;
 }
 
 interface LocalServerInstallDialogProps {
@@ -85,6 +88,7 @@ interface LocalServerInstallDialogProps {
   isReinstall?: boolean;
   /** The team ID of the existing server being reinstalled (null = personal) */
   existingTeamId?: string | null;
+  installScope?: InstallScope;
 }
 
 export function LocalServerInstallDialog({
@@ -95,6 +99,7 @@ export function LocalServerInstallDialog({
   isInstalling,
   isReinstall = false,
   existingTeamId,
+  installScope,
 }: LocalServerInstallDialogProps) {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [credentialType, setCredentialType] = useState<"personal" | "team">(
@@ -217,6 +222,7 @@ export function LocalServerInstallDialog({
         useVaultSecrets &&
         (secretEnvVars.length > 0 || secretFileVars.length > 0),
       serviceAccount: serviceAccount || undefined,
+      isOrgWide: installScope === "org",
     });
 
     // Reset form
@@ -303,6 +309,7 @@ export function LocalServerInstallDialog({
             personalOnly={
               catalogItem ? isPlaywrightCatalogItem(catalogItem.id) : false
             }
+            installScope={installScope}
           />
 
           {canInstall &&
