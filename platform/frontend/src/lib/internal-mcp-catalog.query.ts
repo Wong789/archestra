@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { handleApiError } from "./utils";
 
 const {
   createInternalMcpCatalogItem,
@@ -98,19 +99,21 @@ export function useDeleteCatalogLocalConfigSecret() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const response = await deleteInternalMcpCatalogItemLocalConfigSecret({
-        path: { id },
-      });
-      return response.data;
+      const { data, error } =
+        await deleteInternalMcpCatalogItemLocalConfigSecret({
+          path: { id },
+        });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
       queryClient.invalidateQueries({ queryKey: ["secrets"] });
       toast.success("Database-stored secrets deleted successfully");
-    },
-    onError: (error) => {
-      console.error("Delete local config secret error:", error);
-      toast.error("Failed to delete database-stored secrets");
     },
   });
 }
