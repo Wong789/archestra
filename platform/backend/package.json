@@ -50,6 +50,7 @@
     "@better-auth/oauth-provider": "1.4.19",
     "@better-auth/sso": "1.4.19",
     "@fastify/cors": "^11.1.0",
+    "@ngrok/ngrok": "^1.4.1",
     "@fastify/formbody": "^8.0.2",
     "@fastify/http-proxy": "fastify/fastify-http-proxy#bbe97fb55de3f7e3d15f57791142f7d84abf5a96",
     "@fastify/otel": "^0.16.0",

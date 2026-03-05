@@ -668,6 +668,17 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
+
+  // Ngrok Routes (admin-only)
+  [RouteId.StartNgrokTunnel]: {
+    organization: ["update"],
+  },
+  [RouteId.StopNgrokTunnel]: {
+    organization: ["update"],
+  },
+  [RouteId.GetNgrokStatus]: {
+    organization: ["read"],
+  },
 };
 
 /**

@@ -8,6 +8,7 @@ import config from "@/config";
 import { getKnowledgeGraphProviderInfo } from "@/knowledge-graph";
 import { McpServerRuntimeManager } from "@/mcp-server-runtime";
 import { OrganizationModel } from "@/models";
+import { ngrokTunnel } from "@/ngrok-tunnel";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
 import { EmailProviderTypeSchema, type GlobalToolPolicy } from "@/types";
 import { KnowledgeGraphProviderTypeSchema } from "@/types/knowledge-graph";
@@ -107,6 +108,10 @@ export default configRoutes;
  * detect-ngrok-domain.sh script (for dynamically assigned domains).
  */
 function getNgrokDomain(): string {
+  // Prefer the live in-process tunnel domain
+  const tunnelDomain = ngrokTunnel.domain;
+  if (tunnelDomain) return tunnelDomain;
+
   if (config.ngrokDomain) return config.ngrokDomain;
   try {
     return readFileSync("/app/data/.ngrok_domain", "utf-8").trim();

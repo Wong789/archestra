@@ -1,9 +1,8 @@
 "use client";
 
-import { AlertTriangle, ExternalLink, Info } from "lucide-react";
+import { AlertTriangle, ExternalLink, Info, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { CopyButton } from "@/components/copy-button";
 import Divider from "@/components/divider";
 import { SlackSetupDialog } from "@/components/slack-setup-dialog";
 import { Button } from "@/components/ui/button";
@@ -21,6 +20,11 @@ import { useUpdateSlackChatOpsConfig } from "@/lib/chatops-config.query";
 import config from "@/lib/config";
 import { useFeatures } from "@/lib/config.query";
 import { usePublicBaseUrl } from "@/lib/features.hook";
+import {
+  useNgrokStatus,
+  useStartNgrokTunnel,
+  useStopNgrokTunnel,
+} from "@/lib/ngrok.query";
 import { ChannelsSection } from "../_components/channels-section";
 import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
@@ -104,6 +108,10 @@ export default function SlackPage() {
               : undefined
           }
           onAction={() => setNgrokDialogOpen(true)}
+          doneActionLabel={!isSocket && isLocalDev ? "Manage ngrok" : undefined}
+          onDoneAction={
+            !isSocket && isLocalDev ? () => setNgrokDialogOpen(true) : undefined
+          }
         >
           <RadioGroup
             value={selectedMode}
@@ -258,100 +266,116 @@ function NgrokSetupDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const [step, setStep] = useState<1 | 2>(1);
   const [authToken, setAuthToken] = useState("");
+  const [domain, setDomain] = useState("");
 
-  const ngrokCommand = `ngrok http --authtoken=${authToken || "<your-ngrok-auth-token>"} 9000`;
-  const envCommand =
-    "ARCHESTRA_NGROK_DOMAIN=<your-ngrok-domain>.ngrok-free.dev";
+  const { data: ngrokStatus } = useNgrokStatus();
+  const startTunnel = useStartNgrokTunnel();
+  const stopTunnel = useStopNgrokTunnel();
 
-  const handleOpenChange = (value: boolean) => {
-    onOpenChange(value);
-    if (!value) {
-      setStep(1);
-      setAuthToken("");
-    }
-  };
+  const hasToken = ngrokStatus?.hasToken ?? false;
+  const savedDomain = ngrokStatus?.savedDomain;
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
-        {step === 1 ? (
-          <>
-            <DialogHeader>
-              <DialogTitle>Enter your ngrok auth token</DialogTitle>
-              <DialogDescription>
-                Get one at{" "}
-                <Link
-                  href="https://dashboard.ngrok.com/get-started/your-authtoken"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                >
-                  ngrok.com
-                  <ExternalLink className="h-3 w-3" />
-                </Link>
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 pt-2">
-              <Input
-                placeholder="ngrok auth token"
-                value={authToken}
-                onChange={(e) => setAuthToken(e.target.value)}
-              />
+        <DialogHeader>
+          <DialogTitle>Configure ngrok</DialogTitle>
+          <DialogDescription>
+            Start an ngrok tunnel to make Archestra reachable from the Internet.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 pt-2">
+          {ngrokStatus?.running ? (
+            <div className="space-y-3">
+              <div className="flex items-start gap-3 rounded-lg border border-green-500/30 bg-green-500/5 px-4 py-3">
+                <Info className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
+                <div className="flex flex-col gap-1">
+                  <span className="font-medium text-sm">Tunnel is running</span>
+                  <code className="bg-muted px-1 py-0.5 rounded text-xs">
+                    {ngrokStatus.url}
+                  </code>
+                </div>
+              </div>
               <Button
+                variant="destructive"
                 className="w-full"
-                disabled={!authToken.trim()}
-                onClick={() => setStep(2)}
+                disabled={stopTunnel.isPending}
+                onClick={() => stopTunnel.mutate()}
               >
-                Continue
+                {stopTunnel.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Stopping...
+                  </>
+                ) : (
+                  "Stop tunnel"
+                )}
               </Button>
             </div>
-          </>
-        ) : (
-          <>
-            <DialogHeader>
-              <DialogTitle>Run ngrok for Slack webhooks</DialogTitle>
-              <DialogDescription>
-                Start an ngrok tunnel to make Archestra reachable from Slack.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 pt-2">
-              <div className="space-y-2 text-sm">
-                <p>1. Start an ngrok tunnel:</p>
-                <div className="relative">
-                  <pre className="bg-muted rounded-md p-4 text-xs whitespace-pre-wrap break-all">
-                    {ngrokCommand}
-                  </pre>
-                  <div className="absolute top-0 right-0">
-                    <CopyButton text={ngrokCommand} />
-                  </div>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Auth token</span>
+                  <Link
+                    href="https://dashboard.ngrok.com/get-started/your-authtoken"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-primary hover:underline text-xs"
+                  >
+                    Get token
+                    <ExternalLink className="h-3 w-3" />
+                  </Link>
                 </div>
+                <Input
+                  type="password"
+                  placeholder={
+                    hasToken
+                      ? "Token saved — enter a new one to change"
+                      : "Paste your ngrok auth token"
+                  }
+                  value={authToken}
+                  onChange={(e) => setAuthToken(e.target.value)}
+                />
               </div>
-              <div className="space-y-2 text-sm">
-                <p>
-                  2. Set the ngrok domain in your{" "}
-                  <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                    .env
-                  </code>{" "}
-                  file:
-                </p>
-                <div className="relative">
-                  <pre className="bg-muted rounded-md p-4 text-xs whitespace-pre-wrap break-all">
-                    {envCommand}
-                  </pre>
-                  <div className="absolute top-0 right-0">
-                    <CopyButton text={envCommand} />
-                  </div>
-                </div>
+              <div className="space-y-2">
+                <span className="text-sm font-medium">
+                  Domain{" "}
+                  <span className="text-muted-foreground font-normal">
+                    (optional)
+                  </span>
+                </span>
+                <Input
+                  placeholder={savedDomain ?? "e.g. my-app.ngrok-free.dev"}
+                  value={domain}
+                  onChange={(e) => setDomain(e.target.value)}
+                />
               </div>
-              <p className="text-xs text-muted-foreground">
-                Then restart Archestra with{" "}
-                <code className="bg-muted px-1 py-0.5 rounded">tilt up</code>
-              </p>
-            </div>
-          </>
-        )}
+              <Button
+                className="w-full"
+                disabled={
+                  (!hasToken && !authToken.trim()) || startTunnel.isPending
+                }
+                onClick={() =>
+                  startTunnel.mutate({
+                    authToken: authToken.trim() || undefined,
+                    domain: domain.trim() || undefined,
+                  })
+                }
+              >
+                {startTunnel.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Starting tunnel...
+                  </>
+                ) : (
+                  "Start tunnel"
+                )}
+              </Button>
+            </>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );

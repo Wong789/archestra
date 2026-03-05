@@ -1,9 +1,8 @@
 "use client";
 
-import { ExternalLink, Info } from "lucide-react";
+import { ExternalLink, Info, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { CopyButton } from "@/components/copy-button";
 import Divider from "@/components/divider";
 import { MsTeamsSetupDialog } from "@/components/ms-teams-setup-dialog";
 import { Button } from "@/components/ui/button";
@@ -15,11 +14,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useChatOpsStatus } from "@/lib/chatops.query";
 import config from "@/lib/config";
 import { useFeatures } from "@/lib/config.query";
 import { usePublicBaseUrl } from "@/lib/features.hook";
+import {
+  useNgrokStatus,
+  useStartNgrokTunnel,
+  useStopNgrokTunnel,
+} from "@/lib/ngrok.query";
 import { ChannelsSection } from "../_components/channels-section";
 import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
@@ -84,6 +87,8 @@ export default function MsTeamsPage() {
             done={!!ngrokDomain}
             ctaLabel="Configure ngrok"
             onAction={() => setNgrokDialogOpen(true)}
+            doneActionLabel="Manage"
+            onDoneAction={() => setNgrokDialogOpen(true)}
           >
             {ngrokDomain ? (
               <>
@@ -176,167 +181,116 @@ function NgrokSetupDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const [step, setStep] = useState<1 | 2>(1);
   const [authToken, setAuthToken] = useState("");
+  const [domain, setDomain] = useState("");
 
-  const token = authToken || "<your-ngrok-auth-token>";
-  const dockerCommandUnix = `docker run -p 9000:9000 -p 3000:3000 \\
-  -e ARCHESTRA_QUICKSTART=true \\
-  -e ARCHESTRA_NGROK_AUTH_TOKEN=${token} \\
-  -v /var/run/docker.sock:/var/run/docker.sock \\
-  -v archestra-postgres-data:/var/lib/postgresql/data \\
-  -v archestra-app-data:/app/data \\
-  archestra/platform`;
+  const { data: ngrokStatus } = useNgrokStatus();
+  const startTunnel = useStartNgrokTunnel();
+  const stopTunnel = useStopNgrokTunnel();
 
-  const dockerCommandWindows = `docker run -p 9000:9000 -p 3000:3000 \`
-  -e ARCHESTRA_QUICKSTART=true \`
-  -e ARCHESTRA_NGROK_AUTH_TOKEN=${token} \`
-  -v /var/run/docker.sock:/var/run/docker.sock \`
-  -v archestra-postgres-data:/var/lib/postgresql/data \`
-  -v archestra-app-data:/app/data \`
-  archestra/platform`;
-
-  const ngrokCommand = `ngrok http --authtoken=${authToken || "<your-ngrok-auth-token>"} 9000`;
-  const envCommand =
-    "ARCHESTRA_NGROK_DOMAIN=<your-ngrok-domain>.ngrok-free.dev";
-
-  const handleOpenChange = (value: boolean) => {
-    onOpenChange(value);
-    if (!value) {
-      setStep(1);
-      setAuthToken("");
-    }
-  };
+  const hasToken = ngrokStatus?.hasToken ?? false;
+  const savedDomain = ngrokStatus?.savedDomain;
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
-        {step === 1 ? (
-          <>
-            <DialogHeader>
-              <DialogTitle>Enter your ngrok auth token</DialogTitle>
-              <DialogDescription>
-                Get one at{" "}
-                <Link
-                  href="https://dashboard.ngrok.com/get-started/your-authtoken"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                >
-                  ngrok.com
-                  <ExternalLink className="h-3 w-3" />
-                </Link>
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 pt-2">
-              <Input
-                placeholder="ngrok auth token"
-                value={authToken}
-                onChange={(e) => setAuthToken(e.target.value)}
-              />
+        <DialogHeader>
+          <DialogTitle>Configure ngrok</DialogTitle>
+          <DialogDescription>
+            Start an ngrok tunnel to make Archestra reachable from the Internet.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 pt-2">
+          {ngrokStatus?.running ? (
+            <div className="space-y-3">
+              <div className="flex items-start gap-3 rounded-lg border border-green-500/30 bg-green-500/5 px-4 py-3">
+                <Info className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
+                <div className="flex flex-col gap-1">
+                  <span className="font-medium text-sm">Tunnel is running</span>
+                  <code className="bg-muted px-1 py-0.5 rounded text-xs">
+                    {ngrokStatus.url}
+                  </code>
+                </div>
+              </div>
               <Button
+                variant="destructive"
                 className="w-full"
-                disabled={!authToken.trim()}
-                onClick={() => setStep(2)}
+                disabled={stopTunnel.isPending}
+                onClick={() => stopTunnel.mutate()}
               >
-                Continue
+                {stopTunnel.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Stopping...
+                  </>
+                ) : (
+                  "Stop tunnel"
+                )}
               </Button>
             </div>
-          </>
-        ) : (
-          <>
-            <DialogHeader>
-              <DialogTitle>Run Archestra with ngrok</DialogTitle>
-              <DialogDescription>
-                Choose how you want to set up ngrok with Archestra.
-              </DialogDescription>
-            </DialogHeader>
-            <Tabs defaultValue="docker">
-              <TabsList className="w-full">
-                <TabsTrigger value="docker">Docker</TabsTrigger>
-                <TabsTrigger value="local">Local Development</TabsTrigger>
-              </TabsList>
-              <TabsContent value="docker" className="space-y-3 pt-2">
-                <p className="text-xs text-muted-foreground">
-                  Restart Archestra using the following command to enable ngrok:
-                </p>
-                <Tabs defaultValue="unix">
-                  <TabsList className="h-7 p-0.5">
-                    <TabsTrigger value="unix" className="text-xs h-6 px-2">
-                      Mac / Linux
-                    </TabsTrigger>
-                    <TabsTrigger value="windows" className="text-xs h-6 px-2">
-                      Windows
-                    </TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="unix" className="mt-2">
-                    <div className="relative">
-                      <pre className="bg-muted rounded-md p-4 text-xs whitespace-pre-wrap break-all">
-                        {dockerCommandUnix}
-                      </pre>
-                      <div className="absolute top-2 right-2">
-                        <CopyButton text={dockerCommandUnix} />
-                      </div>
-                    </div>
-                  </TabsContent>
-                  <TabsContent value="windows" className="mt-2">
-                    <div className="relative">
-                      <pre className="bg-muted rounded-md p-4 text-xs whitespace-pre-wrap break-all">
-                        {dockerCommandWindows}
-                      </pre>
-                      <div className="absolute top-2 right-2">
-                        <CopyButton text={dockerCommandWindows} />
-                      </div>
-                    </div>
-                  </TabsContent>
-                </Tabs>
-                <p className="text-xs text-muted-foreground">
-                  Then open{" "}
-                  <code className="bg-muted px-1 py-0.5 rounded">
-                    localhost:3000
-                  </code>
-                </p>
-              </TabsContent>
-              <TabsContent value="local" className="space-y-3 pt-2">
-                <div className="space-y-2 text-sm">
-                  <p>
-                    1. Start an ngrok tunnel pointing to your local Archestra
-                    instance:
-                  </p>
-                  <div className="relative">
-                    <pre className="bg-muted rounded-md p-4 text-xs whitespace-pre-wrap break-all">
-                      {ngrokCommand}
-                    </pre>
-                    <div className="absolute top-0 right-0">
-                      <CopyButton text={ngrokCommand} />
-                    </div>
-                  </div>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Auth token</span>
+                  <Link
+                    href="https://dashboard.ngrok.com/get-started/your-authtoken"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-primary hover:underline text-xs"
+                  >
+                    Get token
+                    <ExternalLink className="h-3 w-3" />
+                  </Link>
                 </div>
-                <div className="space-y-2 text-sm">
-                  <p>
-                    2. Set the ngrok domain in your{" "}
-                    <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                      .env
-                    </code>{" "}
-                    file:
-                  </p>
-                  <div className="relative">
-                    <pre className="bg-muted rounded-md p-4 text-xs whitespace-pre-wrap break-all">
-                      {envCommand}
-                    </pre>
-                    <div className="absolute top-0 right-0">
-                      <CopyButton text={envCommand} />
-                    </div>
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Then restart Archestra with{" "}
-                  <code className="bg-muted px-1 py-0.5 rounded">tilt up</code>
-                </p>
-              </TabsContent>
-            </Tabs>
-          </>
-        )}
+                <Input
+                  type="password"
+                  placeholder={
+                    hasToken
+                      ? "Token saved — enter a new one to change"
+                      : "Paste your ngrok auth token"
+                  }
+                  value={authToken}
+                  onChange={(e) => setAuthToken(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <span className="text-sm font-medium">
+                  Domain{" "}
+                  <span className="text-muted-foreground font-normal">
+                    (optional)
+                  </span>
+                </span>
+                <Input
+                  placeholder={savedDomain ?? "e.g. my-app.ngrok-free.dev"}
+                  value={domain}
+                  onChange={(e) => setDomain(e.target.value)}
+                />
+              </div>
+              <Button
+                className="w-full"
+                disabled={
+                  (!hasToken && !authToken.trim()) || startTunnel.isPending
+                }
+                onClick={() =>
+                  startTunnel.mutate({
+                    authToken: authToken.trim() || undefined,
+                    domain: domain.trim() || undefined,
+                  })
+                }
+              >
+                {startTunnel.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Starting tunnel...
+                  </>
+                ) : (
+                  "Start tunnel"
+                )}
+              </Button>
+            </>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );

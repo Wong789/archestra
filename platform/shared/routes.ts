@@ -33,6 +33,11 @@ export const RouteId = {
   // Config Routes
   GetConfig: "getConfig",
 
+  // Ngrok Routes
+  StartNgrokTunnel: "startNgrokTunnel",
+  StopNgrokTunnel: "stopNgrokTunnel",
+  GetNgrokStatus: "getNgrokStatus",
+
   // Auth Routes
   GetDefaultCredentialsStatus: "getDefaultCredentialsStatus",
 
