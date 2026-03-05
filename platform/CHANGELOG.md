@@ -1,5 +1,47 @@
 # Changelog
 
+## [1.0.56](https://github.com/archestra-ai/archestra/compare/platform-v1.0.55...platform-v1.0.56) (2026-03-05)
+
+
+### Features
+
+* support file attachments from Slack and MS Teams messages ([#3120](https://github.com/archestra-ai/archestra/issues/3120)) ([a2cdf49](https://github.com/archestra-ai/archestra/commit/a2cdf49056188d4087385a99f8ce40e43be7db42))
+
+
+### Bug Fixes
+
+* make chat deletion reliable in search palette ([#3125](https://github.com/archestra-ai/archestra/issues/3125)) ([ba7a366](https://github.com/archestra-ai/archestra/commit/ba7a366b41c5d7d040ee937f846abe1b04b9e1a5)), closes [#3071](https://github.com/archestra-ai/archestra/issues/3071)
+* suppress MCP gateway log spam ([#3123](https://github.com/archestra-ai/archestra/issues/3123)) ([100d112](https://github.com/archestra-ai/archestra/commit/100d1121691378a87a8aa45bec62110a952fa690)), closes [#3122](https://github.com/archestra-ai/archestra/issues/3122)
+
+
+### Performance Improvements
+
+* speed up agent edit dialog save ([#3124](https://github.com/archestra-ai/archestra/issues/3124)) ([ac39bb4](https://github.com/archestra-ai/archestra/commit/ac39bb42ac17a082f39434e20635d8b07884440d)), closes [#3116](https://github.com/archestra-ai/archestra/issues/3116)
+
+
+### Miscellaneous Chores
+
+* **deps:** bump @hono/node-server from 1.19.9 to 1.19.10 in /platform/mcp_server_docker_image ([#3121](https://github.com/archestra-ai/archestra/issues/3121)) ([1c0c063](https://github.com/archestra-ai/archestra/commit/1c0c0636423b2954eb3049f16914581f7fbecee3))
+* **deps:** bump hono from 4.12.2 to 4.12.5 in /platform/mcp_server_docker_image ([#3118](https://github.com/archestra-ai/archestra/issues/3118)) ([bec7cee](https://github.com/archestra-ai/archestra/commit/bec7ceed46f9ec680fee4a324a3ba9d78238b287))
+
+## [1.0.55](https://github.com/archestra-ai/archestra/compare/platform-v1.0.54...platform-v1.0.55) (2026-03-04)
+
+
+### Bug Fixes
+
+* prevent carousel arrow key navigation when focused on inputs ([#3114](https://github.com/archestra-ai/archestra/issues/3114)) ([134b03e](https://github.com/archestra-ai/archestra/commit/134b03eddc70c44e152e57b2619afbb239dfb3ac))
+* return actionable auth-required message when MCP tool calls fail with 401 ([#3110](https://github.com/archestra-ai/archestra/issues/3110)) ([12555b8](https://github.com/archestra-ai/archestra/commit/12555b8512b5c8e5fc5617354104bc2c9cab46cc))
+* tool calls stuck in a2a sessions due to approval ([#3117](https://github.com/archestra-ai/archestra/issues/3117)) ([a92ac73](https://github.com/archestra-ai/archestra/commit/a92ac73f8dd1973fd7c24d6f6490e6e7a0641741))
+
+## [1.0.54](https://github.com/archestra-ai/archestra/compare/platform-v1.0.53...platform-v1.0.54) (2026-03-04)
+
+
+### Bug Fixes
+
+* fix configure ngrok dialog styling ([#3104](https://github.com/archestra-ai/archestra/issues/3104)) ([7b46215](https://github.com/archestra-ai/archestra/commit/7b46215ad67268ce15766366adbbefc6d9d3fc8c))
+* fix isByosVault flag for secrets created with forceDB if readonly_vault is used ([#3103](https://github.com/archestra-ai/archestra/issues/3103)) ([4ba0e0c](https://github.com/archestra-ai/archestra/commit/4ba0e0ce297e41c0916943699dff2c2c10b794a3))
+* hide default credentials warning when basic auth disabled ([#3111](https://github.com/archestra-ai/archestra/issues/3111)) ([7729d62](https://github.com/archestra-ai/archestra/commit/7729d62d9024c74b2a4dd3deb90a3159a13c98aa))
+
 ## [1.0.53](https://github.com/archestra-ai/archestra/compare/platform-v1.0.52...platform-v1.0.53) (2026-03-03)
 
 

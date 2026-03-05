@@ -28675,8 +28675,16 @@ export type GetMcpServerResponses = {
 export type GetMcpServerResponse = GetMcpServerResponses[keyof GetMcpServerResponses];
 
 export type ReauthenticateMcpServerData = {
-    body: {
-        secretId: string;
+    body?: {
+        secretId?: string;
+        accessToken?: string;
+        userConfigValues?: {
+            [key: string]: string;
+        };
+        environmentValues?: {
+            [key: string]: string;
+        };
+        isByosVault?: boolean;
     };
     path: {
         id: string;
