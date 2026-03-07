@@ -19,8 +19,8 @@ The app manages everything needed to run Archestra locally:
 ┌──────────────────────────────────────┐
 │        Tauri App (native shell)      │
 │  ┌────────────────────────────────┐  │
-│  │  WebView UI (HTML/CSS/JS)     │  │
-│  │  ui/index.html + app.js       │  │
+│  │  WebView UI (React+Tailwind) │  │
+│  │  ui/src/ (Vite build)        │  │
 │  └────────────────────────────────┘  │
 │  ┌────────────────────────────────┐  │
 │  │  Rust Backend                 │  │
@@ -48,13 +48,21 @@ The app manages everything needed to run Archestra locally:
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-### 2. Install Tauri CLI
+### 2. Install Node.js
+
+Required for the React frontend. Install via [nvm](https://github.com/nvm-sh/nvm) or [nodejs.org](https://nodejs.org/).
+
+```bash
+node --version  # v18+ required
+```
+
+### 3. Install Tauri CLI
 
 ```bash
 cargo install tauri-cli --version "^2"
 ```
 
-### 3. Install platform-specific system dependencies
+### 4. Install platform-specific system dependencies
 
 **macOS:**
 ```bash
@@ -71,14 +79,23 @@ sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
 - Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-studio-build-tools/) with the "Desktop development with C++" workload
 - Install [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) (comes with Windows 11, manual install on Windows 10)
 
-### 4. Run in dev mode
+### 5. Install frontend dependencies
+
+```bash
+cd desktop/ui
+npm install
+```
+
+### 6. Run in dev mode
 
 ```bash
 cd desktop
 cargo tauri dev
 ```
 
-First run takes 2-4 minutes (compiling Rust deps). After that, the Rust backend recompiles incrementally (~15-30s) and the WebView UI (HTML/CSS/JS) hot-reloads instantly.
+This automatically starts the Vite dev server (`npm run dev` in `ui/`) and the Rust backend.
+
+First run takes 2-4 minutes (compiling Rust deps). After that, the Rust backend recompiles incrementally (~15-30s) and React changes hot-reload instantly via Vite HMR.
 
 The app window will open automatically. It will try to detect your container runtime and connect to a running Archestra container.
 
@@ -140,10 +157,29 @@ desktop/
 │       ├── pods.rs             # Runs kubectl inside the container to manage KinD pods
 │       └── updater.rs          # Compares local image digest with Docker Hub to detect updates
 │
-└── ui/
-    ├── index.html              # Single-page app layout: sidebar nav + 5 tab panels
-    ├── styles.css              # Dark theme, status indicators, log viewer, pod cards
-    └── app.js                  # All frontend logic: Tauri IPC calls, tab switching, state management
+└── ui/                         # React + Tailwind frontend (Vite)
+    ├── package.json            # Frontend dependencies (react, tailwindcss, vite, etc.)
+    ├── vite.config.ts          # Vite config: dev server on port 1420
+    ├── tailwind.config.js      # Tailwind theme: dark colors matching the design
+    ├── tsconfig.json           # TypeScript config
+    ├── postcss.config.js       # PostCSS with Tailwind plugin
+    ├── index.html              # HTML entry point
+    └── src/
+        ├── main.tsx            # React root render
+        ├── App.tsx             # Top-level layout: sidebar + tab routing + shared state
+        ├── types.ts            # TypeScript interfaces for all Tauri IPC types
+        ├── styles.css          # Tailwind directives + custom status-dot utilities
+        ├── hooks/
+        │   └── useTauri.ts     # Typed wrapper around all Tauri invoke() calls
+        └── components/
+            ├── Sidebar.tsx     # Navigation sidebar with tab buttons + update indicator
+            ├── Button.tsx      # Reusable button (default/primary/danger variants)
+            ├── StatusCard.tsx   # Reusable status card with dot indicator
+            ├── HomeTab.tsx     # Dashboard: runtime/container/image/cluster cards + quick links
+            ├── LogsTab.tsx     # Log viewer: filters, search, download, pod-specific logs
+            ├── PodsTab.tsx     # Pod list: status, actions, describe modal, cluster info bar
+            ├── DatabaseTab.tsx # Drizzle Studio toggle + open in browser
+            └── SettingsTab.tsx # Container config, resource limits, auto-update toggle
 ```
 
 ---
@@ -195,7 +231,7 @@ Pod-specific logs are fetched via the Archestra backend REST API (`/api/mcp_serv
 
 ## How the UI Works (`ui/`)
 
-Plain HTML/CSS/JS — no build step, no framework. Communicates with Rust via Tauri's `invoke()` IPC.
+Built with **React 19 + Tailwind CSS 3 + TypeScript**, bundled by **Vite**. Communicates with Rust via Tauri's `invoke()` IPC through a typed `useTauri()` hook.
 
 ### Tabs
 

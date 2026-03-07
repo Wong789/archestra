@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-surface-active rounded-sm;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-content-muted;
+  }
+}
+
+@layer components {
+  .status-dot {
+    @apply w-2.5 h-2.5 rounded-full shrink-0;
+  }
+  .status-dot-running {
+    @apply bg-success;
+    box-shadow: 0 0 8px theme("colors.success.DEFAULT");
+  }
+  .status-dot-stopped {
+    @apply bg-content-muted;
+  }
+  .status-dot-starting {
+    @apply bg-warning animate-pulse;
+  }
+  .status-dot-error {
+    @apply bg-danger;
+  }
+  .status-dot-neutral {
+    @apply bg-content-muted;
+  }
+}

@@ -4,7 +4,9 @@
   "version": "0.1.0",
   "identifier": "com.archestra.desktop",
   "build": {
-    "frontendDist": "../ui",
+    "beforeDevCommand": "cd ../ui && npm run dev",
+    "beforeBuildCommand": "cd ../ui && npm run build",
+    "frontendDist": "../ui/dist",
     "devUrl": "http://localhost:1420"
   },
   "app": {
