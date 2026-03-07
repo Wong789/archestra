@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Archestra Desktop</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Sidebar -->
+    <nav id="sidebar">
+      <div class="sidebar-header">
+        <h1 class="logo">Archestra</h1>
+        <span id="version-badge" class="badge">v0.1.0</span>
+      </div>
+
+      <div class="nav-items">
+        <button class="nav-item active" data-tab="home">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          <span>Home</span>
+        </button>
+        <button class="nav-item" data-tab="logs">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          <span>Logs</span>
+        </button>
+        <button class="nav-item" data-tab="pods">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          <span>Pods</span>
+        </button>
+        <button class="nav-item" data-tab="database">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          <span>Database</span>
+        </button>
+        <button class="nav-item" data-tab="settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>Settings</span>
+        </button>
+      </div>
+
+      <div class="sidebar-footer">
+        <div id="update-indicator" class="update-indicator hidden">
+          <span class="update-dot"></span>
+          <span>Update available</span>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main content -->
+    <main id="content">
+      <!-- Home Tab -->
+      <div id="tab-home" class="tab-content active">
+        <div class="page-header">
+          <h2>Dashboard</h2>
+          <div class="header-actions">
+            <button id="btn-open-ui" class="btn btn-primary" disabled>
+              Open Archestra UI
+            </button>
+          </div>
+        </div>
+
+        <!-- Status Cards -->
+        <div class="status-grid">
+          <div class="status-card">
+            <div class="status-card-header">
+              <span class="status-card-title">Runtime</span>
+              <span id="runtime-status" class="status-dot stopped"></span>
+            </div>
+            <div id="runtime-type" class="status-card-value">Detecting...</div>
+            <div id="runtime-version" class="status-card-sub"></div>
+            <div class="status-card-actions">
+              <button id="btn-start-runtime" class="btn btn-sm" disabled>Start</button>
+              <button id="btn-stop-runtime" class="btn btn-sm btn-danger" disabled>Stop</button>
+            </div>
+          </div>
+
+          <div class="status-card">
+            <div class="status-card-header">
+              <span class="status-card-title">Container</span>
+              <span id="container-status" class="status-dot stopped"></span>
+            </div>
+            <div id="container-image" class="status-card-value">-</div>
+            <div id="container-uptime" class="status-card-sub"></div>
+            <div class="status-card-actions">
+              <button id="btn-start-container" class="btn btn-sm btn-primary" disabled>Start</button>
+              <button id="btn-stop-container" class="btn btn-sm btn-danger" disabled>Stop</button>
+              <button id="btn-restart-container" class="btn btn-sm" disabled>Restart</button>
+            </div>
+          </div>
+
+          <div class="status-card">
+            <div class="status-card-header">
+              <span class="status-card-title">Image</span>
+              <span id="image-status" class="status-dot neutral"></span>
+            </div>
+            <div id="image-name" class="status-card-value">-</div>
+            <div id="image-size" class="status-card-sub"></div>
+            <div class="status-card-actions">
+              <button id="btn-check-updates" class="btn btn-sm">Check for Updates</button>
+              <button id="btn-pull-image" class="btn btn-sm btn-primary hidden">Pull Update</button>
+            </div>
+          </div>
+
+          <div class="status-card">
+            <div class="status-card-header">
+              <span class="status-card-title">Cluster</span>
+              <span id="cluster-status" class="status-dot neutral"></span>
+            </div>
+            <div id="cluster-name" class="status-card-value">-</div>
+            <div id="cluster-pods" class="status-card-sub"></div>
+          </div>
+        </div>
+
+        <!-- Quick Links -->
+        <div class="section">
+          <h3>Quick Links</h3>
+          <div class="quick-links">
+            <a href="#" id="link-frontend" class="quick-link disabled">
+              <span class="quick-link-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/></svg>
+              </span>
+              <span>Frontend</span>
+              <span class="quick-link-port" id="link-frontend-port">:3000</span>
+            </a>
+            <a href="#" id="link-backend" class="quick-link disabled">
+              <span class="quick-link-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+              </span>
+              <span>Backend API</span>
+              <span class="quick-link-port" id="link-backend-port">:9000</span>
+            </a>
+            <a href="#" id="link-drizzle" class="quick-link disabled">
+              <span class="quick-link-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+              </span>
+              <span>Drizzle Studio</span>
+              <span class="quick-link-port" id="link-drizzle-port">:4983</span>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Logs Tab -->
+      <div id="tab-logs" class="tab-content">
+        <div class="page-header">
+          <h2>Logs</h2>
+          <div class="header-actions">
+            <select id="log-source-filter" class="select">
+              <option value="all">All Sources</option>
+              <option value="backend">Backend</option>
+              <option value="frontend">Frontend</option>
+              <option value="postgres">PostgreSQL</option>
+              <option value="kind">KinD</option>
+              <option value="supervisor">Supervisor</option>
+              <option value="system">System</option>
+            </select>
+            <select id="log-level-filter" class="select">
+              <option value="all">All Levels</option>
+              <option value="error">Error</option>
+              <option value="warn">Warning</option>
+              <option value="info">Info</option>
+              <option value="debug">Debug</option>
+            </select>
+            <input type="text" id="log-search" class="input" placeholder="Search logs..." />
+            <button id="btn-refresh-logs" class="btn btn-sm">Refresh</button>
+            <button id="btn-download-logs" class="btn btn-sm">Download</button>
+          </div>
+        </div>
+
+        <div id="log-container" class="log-container">
+          <div class="log-placeholder">
+            Start the container to view logs
+          </div>
+        </div>
+      </div>
+
+      <!-- Pods Tab -->
+      <div id="tab-pods" class="tab-content">
+        <div class="page-header">
+          <h2>MCP Server Pods</h2>
+          <div class="header-actions">
+            <button id="btn-refresh-pods" class="btn btn-sm">Refresh</button>
+          </div>
+        </div>
+
+        <div id="pods-list" class="pods-list">
+          <div class="log-placeholder">
+            Start the container to view pods
+          </div>
+        </div>
+
+        <div id="cluster-info-bar" class="cluster-info-bar hidden">
+          <span id="cluster-info-name">Cluster: -</span>
+          <span id="cluster-info-nodes">Nodes: -</span>
+          <span id="cluster-info-pod-count">Pods: -</span>
+          <span id="cluster-info-cpu">CPU: -</span>
+          <span id="cluster-info-memory">Memory: -</span>
+        </div>
+
+        <!-- Pod detail modal -->
+        <div id="pod-detail-modal" class="modal hidden">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h3 id="pod-detail-title">Pod Details</h3>
+              <button class="modal-close" id="btn-close-pod-detail">&times;</button>
+            </div>
+            <pre id="pod-detail-content" class="pod-detail-content"></pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- Database Tab -->
+      <div id="tab-database" class="tab-content">
+        <div class="page-header">
+          <h2>Database</h2>
+        </div>
+
+        <div class="database-section">
+          <div class="status-card wide">
+            <div class="status-card-header">
+              <span class="status-card-title">Drizzle Studio</span>
+              <span id="drizzle-status" class="status-dot stopped"></span>
+            </div>
+            <p class="status-card-description">
+              Drizzle Studio provides a visual interface for browsing and managing the Archestra PostgreSQL database.
+              It runs inside the container and is accessible via your browser.
+            </p>
+            <div class="status-card-actions">
+              <button id="btn-toggle-drizzle" class="btn btn-primary">Enable Drizzle Studio</button>
+              <button id="btn-open-drizzle" class="btn btn-sm hidden">Open in Browser</button>
+            </div>
+            <p class="status-card-warning">
+              Warning: Drizzle Studio gives full read/write access to the database. Use with caution.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Settings Tab -->
+      <div id="tab-settings" class="tab-content">
+        <div class="page-header">
+          <h2>Settings</h2>
+        </div>
+
+        <div class="settings-section">
+          <h3>Container Configuration</h3>
+          <p class="settings-description">Changes require a container restart to take effect.</p>
+
+          <div class="form-group">
+            <label for="setting-image">Docker Image</label>
+            <input type="text" id="setting-image" class="input" value="archestra/platform:latest" />
+          </div>
+          <div class="form-group">
+            <label for="setting-container-name">Container Name</label>
+            <input type="text" id="setting-container-name" class="input" value="archestra" />
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="setting-frontend-port">Frontend Port</label>
+              <input type="number" id="setting-frontend-port" class="input" value="3000" />
+            </div>
+            <div class="form-group">
+              <label for="setting-backend-port">Backend Port</label>
+              <input type="number" id="setting-backend-port" class="input" value="9000" />
+            </div>
+            <div class="form-group">
+              <label for="setting-drizzle-port">Drizzle Studio Port</label>
+              <input type="number" id="setting-drizzle-port" class="input" value="4983" />
+            </div>
+          </div>
+
+          <h3>Resource Limits</h3>
+          <p class="settings-description">Resources allocated to the container runtime (Colima/Lima).</p>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="setting-cpu">CPU Cores</label>
+              <input type="text" id="setting-cpu" class="input" value="4" />
+            </div>
+            <div class="form-group">
+              <label for="setting-memory">Memory (e.g., 4g)</label>
+              <input type="text" id="setting-memory" class="input" value="4g" />
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button id="btn-save-settings" class="btn btn-primary">Save Settings</button>
+            <button id="btn-reset-settings" class="btn">Reset to Defaults</button>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h3>Auto-Update</h3>
+          <p class="settings-description">Automatically check for new Docker images on startup.</p>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="setting-auto-update" checked />
+              <span>Check for updates on startup</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

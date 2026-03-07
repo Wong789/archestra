@@ -1,0 +1,38 @@
+[package]
+name = "archestra-desktop"
+version = "0.1.0"
+description = "Archestra Desktop - Run Archestra as a native desktop application"
+authors = ["Archestra"]
+license = "MIT"
+repository = "https://github.com/archestra-ai/archestra"
+edition = "2021"
+
+[lib]
+name = "archestra_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+path = "src-tauri/src/lib.rs"
+
+[[bin]]
+name = "archestra-desktop"
+path = "src-tauri/src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+tauri-plugin-notification = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json"] }
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "6"
+which = "7"
+log = "0.4"
+env_logger = "0.11"
+thiserror = "2"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]

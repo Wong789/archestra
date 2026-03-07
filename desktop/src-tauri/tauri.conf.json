@@ -1,0 +1,91 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nickhartjes/tauri-settings-schema/main/schema/tauri.schema.json",
+  "productName": "Archestra",
+  "version": "0.1.0",
+  "identifier": "com.archestra.desktop",
+  "build": {
+    "frontendDist": "../ui",
+    "devUrl": "http://localhost:1420"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "Archestra Desktop",
+        "width": 1100,
+        "height": 750,
+        "minWidth": 800,
+        "minHeight": 600,
+        "resizable": true,
+        "center": true
+      }
+    ],
+    "trayIcon": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true,
+      "tooltip": "Archestra"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "12.0"
+    },
+    "windows": {
+      "wix": {
+        "language": "en-US"
+      }
+    },
+    "linux": {
+      "deb": {
+        "depends": []
+      },
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    }
+  },
+  "plugins": {
+    "shell": {
+      "open": true,
+      "scope": [
+        {
+          "name": "docker",
+          "cmd": "docker",
+          "args": true
+        },
+        {
+          "name": "colima",
+          "cmd": "colima",
+          "args": true
+        },
+        {
+          "name": "lima",
+          "cmd": "limactl",
+          "args": true
+        },
+        {
+          "name": "wsl",
+          "cmd": "wsl",
+          "args": true
+        },
+        {
+          "name": "open-browser",
+          "cmd": "open",
+          "args": true
+        }
+      ]
+    },
+    "notification": {
+      "all": true
+    }
+  }
+}
