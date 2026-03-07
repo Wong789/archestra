@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "cd ../ui && npm run dev",
     "beforeBuildCommand": "cd ../ui && npm run build",
-    "frontendDist": "../ui/dist",
+    "frontendDist": "../ui/out",
     "devUrl": "http://localhost:1420"
   },
   "app": {

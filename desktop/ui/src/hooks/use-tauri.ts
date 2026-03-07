@@ -8,7 +8,7 @@ import type {
   ClusterInfo,
   UpdateInfo,
   ImageInfo,
-} from "../types";
+} from "@/lib/types";
 
 export function useTauri() {
   return {

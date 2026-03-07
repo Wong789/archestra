@@ -19,8 +19,8 @@ The app manages everything needed to run Archestra locally:
 ┌──────────────────────────────────────┐
 │        Tauri App (native shell)      │
 │  ┌────────────────────────────────┐  │
-│  │  WebView UI (React+Tailwind) │  │
-│  │  ui/src/ (Vite build)        │  │
+│  │  WebView UI (Next.js+shadcn) │  │
+│  │  ui/src/ (static export)     │  │
 │  └────────────────────────────────┘  │
 │  ┌────────────────────────────────┐  │
 │  │  Rust Backend                 │  │
@@ -93,9 +93,9 @@ cd desktop
 cargo tauri dev
 ```
 
-This automatically starts the Vite dev server (`npm run dev` in `ui/`) and the Rust backend.
+This automatically starts the Next.js dev server (`npm run dev` in `ui/`) and the Rust backend.
 
-First run takes 2-4 minutes (compiling Rust deps). After that, the Rust backend recompiles incrementally (~15-30s) and React changes hot-reload instantly via Vite HMR.
+First run takes 2-4 minutes (compiling Rust deps). After that, the Rust backend recompiles incrementally (~15-30s) and React changes hot-reload instantly via Next.js Turbopack.
 
 The app window will open automatically. It will try to detect your container runtime and connect to a running Archestra container.
 
@@ -157,29 +157,31 @@ desktop/
 │       ├── pods.rs             # Runs kubectl inside the container to manage KinD pods
 │       └── updater.rs          # Compares local image digest with Docker Hub to detect updates
 │
-└── ui/                         # React + Tailwind frontend (Vite)
-    ├── package.json            # Frontend dependencies (react, tailwindcss, vite, etc.)
-    ├── vite.config.ts          # Vite config: dev server on port 1420
-    ├── tailwind.config.js      # Tailwind theme: dark colors matching the design
-    ├── tsconfig.json           # TypeScript config
-    ├── postcss.config.js       # PostCSS with Tailwind plugin
-    ├── index.html              # HTML entry point
+└── ui/                         # Next.js + shadcn/ui frontend (static export)
+    ├── package.json            # Frontend dependencies (next, react, shadcn, lucide, etc.)
+    ├── next.config.ts          # Static export config (output: 'export')
+    ├── components.json         # shadcn/ui config (new-york style, neutral base)
+    ├── tsconfig.json           # TypeScript config with @/ path alias
+    ├── postcss.config.mjs      # PostCSS with Tailwind CSS v4
     └── src/
-        ├── main.tsx            # React root render
-        ├── App.tsx             # Top-level layout: sidebar + tab routing + shared state
-        ├── types.ts            # TypeScript interfaces for all Tauri IPC types
-        ├── styles.css          # Tailwind directives + custom status-dot utilities
+        ├── app/
+        │   ├── layout.tsx      # Root layout with dark mode class
+        │   ├── page.tsx        # Main page: sidebar + tab routing + shared state
+        │   └── globals.css     # Tailwind v4 + dark theme CSS vars (modern-minimal from platform)
+        ├── lib/
+        │   ├── utils.ts        # cn() utility for class merging
+        │   └── types.ts        # TypeScript interfaces for all Tauri IPC types
         ├── hooks/
-        │   └── useTauri.ts     # Typed wrapper around all Tauri invoke() calls
+        │   └── use-tauri.ts    # Typed wrapper around all Tauri invoke() calls
         └── components/
-            ├── Sidebar.tsx     # Navigation sidebar with tab buttons + update indicator
-            ├── Button.tsx      # Reusable button (default/primary/danger variants)
-            ├── StatusCard.tsx   # Reusable status card with dot indicator
-            ├── HomeTab.tsx     # Dashboard: runtime/container/image/cluster cards + quick links
-            ├── LogsTab.tsx     # Log viewer: filters, search, download, pod-specific logs
-            ├── PodsTab.tsx     # Pod list: status, actions, describe modal, cluster info bar
-            ├── DatabaseTab.tsx # Drizzle Studio toggle + open in browser
-            └── SettingsTab.tsx # Container config, resource limits, auto-update toggle
+            ├── ui/             # shadcn/ui primitives (button, card, badge, input, select, dialog, etc.)
+            ├── sidebar.tsx     # Navigation sidebar with lucide icons + update indicator
+            ├── status-card.tsx # Reusable status card built on shadcn Card
+            ├── home-tab.tsx    # Dashboard: runtime/container/image/cluster cards + quick links
+            ├── logs-tab.tsx    # Log viewer: shadcn Select filters, search, download
+            ├── pods-tab.tsx    # Pod list: badges, actions, Radix Dialog for describe
+            ├── database-tab.tsx # Drizzle Studio toggle + open in browser
+            └── settings-tab.tsx # Container config with shadcn Input/Label, resource limits
 ```
 
 ---
@@ -231,7 +233,7 @@ Pod-specific logs are fetched via the Archestra backend REST API (`/api/mcp_serv
 
 ## How the UI Works (`ui/`)
 
-Built with **React 19 + Tailwind CSS 3 + TypeScript**, bundled by **Vite**. Communicates with Rust via Tauri's `invoke()` IPC through a typed `useTauri()` hook.
+Built with **Next.js 15 + Tailwind CSS v4 + shadcn/ui + TypeScript**, statically exported for Tauri. Uses the same stack and design system (new-york style, modern-minimal dark theme) as the Archestra platform — but fully self-contained with no shared code. All components are client-only (`"use client"`). Communicates with Rust via Tauri's `invoke()` IPC through a typed `useTauri()` hook.
 
 ### Tabs
 
