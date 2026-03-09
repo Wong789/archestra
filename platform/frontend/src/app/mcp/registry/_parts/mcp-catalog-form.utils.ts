@@ -4,6 +4,7 @@ import {
   type ImagePullSecretConfig,
   isVaultReference,
   parseVaultReference,
+  slugify,
 } from "@shared";
 import { parseDockerArgsToLocalConfig } from "./docker-args-parser";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
@@ -16,7 +17,7 @@ export function transformFormToApiData(
   values: McpCatalogFormValues,
 ): McpCatalogApiData {
   const data: McpCatalogApiData = {
-    slug: values.name,
+    slug: slugify(values.name),
     displayName: values.name,
     description: values.description || null,
     serverType: values.serverType,
