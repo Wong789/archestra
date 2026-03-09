@@ -689,7 +689,7 @@ export async function findCatalogItem(
     );
   }
 
-  return catalog.find((item: { name: string }) => item.name === name);
+  return catalog.find((item: { slug: string }) => item.slug === name);
 }
 
 /**

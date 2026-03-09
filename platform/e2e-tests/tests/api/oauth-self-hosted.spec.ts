@@ -211,7 +211,8 @@ test.describe("OAuth for Self-Hosted MCP Servers", () => {
       method: "post",
       urlSuffix: "/api/internal_mcp_catalog",
       data: {
-        name: `oauth-remote-test-${Date.now()}`,
+        slug: `oauth-remote-test-${Date.now()}`,
+        displayName: `oauth-remote-test-${Date.now()}`,
         description: "E2E test: remote server with OAuth",
         serverUrl: MCP_EXAMPLE_SERVER_MCP_URL,
         serverType: "remote",
@@ -290,7 +291,8 @@ test.describe("OAuth for Self-Hosted MCP Servers", () => {
       method: "post",
       urlSuffix: "/api/internal_mcp_catalog",
       data: {
-        name: `oauth-local-http-test-${Date.now()}`,
+        slug: `oauth-local-http-test-${Date.now()}`,
+        displayName: `oauth-local-http-test-${Date.now()}`,
         description: "E2E test: self-hosted streamable-http server with OAuth",
         serverType: "local",
         authMethod: "oauth",
@@ -352,7 +354,8 @@ test.describe("OAuth for Self-Hosted MCP Servers", () => {
       method: "post",
       urlSuffix: "/api/internal_mcp_catalog",
       data: {
-        name: `oauth-local-stdio-test-${Date.now()}`,
+        slug: `oauth-local-stdio-test-${Date.now()}`,
+        displayName: `oauth-local-stdio-test-${Date.now()}`,
         description:
           "E2E test: self-hosted stdio server with OAuth token via env var",
         serverType: "local",
