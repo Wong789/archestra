@@ -1031,12 +1031,15 @@ const createConnector = async (
   makeApiRequest({
     request,
     method: "post",
-    urlSuffix: `/api/knowledge-bases/${kgId}/connectors`,
+    urlSuffix: "/api/connectors",
     data: {
       name: name ?? `Test Connector ${crypto.randomUUID().slice(0, 8)}`,
+      knowledgeBaseIds: [kgId],
       connectorType: overrides?.connectorType ?? "jira",
       config: overrides?.config ?? {
-        baseUrl: "https://test.atlassian.net",
+        type: "jira",
+        jiraBaseUrl: "https://test.atlassian.net",
+        isCloud: true,
         projectKey: "TEST",
       },
       credentials: overrides?.credentials ?? {
@@ -1054,13 +1057,13 @@ const createConnector = async (
  */
 const deleteConnector = async (
   request: APIRequestContext,
-  kgId: string,
+  _kgId: string,
   connectorId: string,
 ) =>
   makeApiRequest({
     request,
     method: "delete",
-    urlSuffix: `/api/knowledge-bases/${kgId}/connectors/${connectorId}`,
+    urlSuffix: `/api/connectors/${connectorId}`,
     ignoreStatusCheck: true,
   });
 
