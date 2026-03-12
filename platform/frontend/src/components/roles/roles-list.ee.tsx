@@ -7,7 +7,7 @@ import {
   type Permissions,
 } from "@shared";
 import { allAvailableActions } from "@shared/access-control";
-import { Plus, Shield, Trash2 } from "lucide-react";
+import { Copy, Plus, Shield, Trash2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { PredefinedRoles } from "@/components/roles/predefined-roles";
@@ -147,6 +147,12 @@ export function RolesList() {
     setEditDialogOpen(true);
   }, []);
 
+  const openCopyDialog = useCallback((role: Role) => {
+    setRoleName(`Copy of ${role.name}`);
+    setPermission(role.permission);
+    setCreateDialogOpen(true);
+  }, []);
+
   if (isLoading) {
     return (
       <Card>
@@ -195,7 +201,10 @@ export function RolesList() {
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          <PredefinedRoles predefinedRoles={predefinedRoles} />
+          <PredefinedRoles
+            predefinedRoles={predefinedRoles}
+            onCopy={openCopyDialog}
+          />
           {customRoles.length > 0 && (
             <div>
               <h3 className="mb-3 text-sm font-semibold text-muted-foreground">
@@ -214,6 +223,15 @@ export function RolesList() {
                       </div>
                     </div>
                     <div className="flex gap-2">
+                      <PermissionButton
+                        permissions={{ ac: ["create"] }}
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openCopyDialog(role)}
+                      >
+                        <Copy className="mr-1 h-4 w-4" />
+                        Copy
+                      </PermissionButton>
                       <PermissionButton
                         permissions={{ ac: ["update"] }}
                         variant="outline"

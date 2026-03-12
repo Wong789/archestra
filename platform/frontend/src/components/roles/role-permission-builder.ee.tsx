@@ -144,6 +144,28 @@ export function RolePermissionBuilder({
     [userPermissions, isResourceFullySelected],
   );
 
+  // Count selected and total actions for a category
+  const getCategoryCounts = useCallback(
+    (category: string): { selected: number; total: number } => {
+      const resources = resourceCategories[category] || [];
+      const visibleResources = resources.filter(
+        (resource) => userPermissions[resource],
+      );
+
+      let selected = 0;
+      let total = 0;
+      for (const resource of visibleResources) {
+        const availableActions = userPermissions[resource] || [];
+        const selectedActions = permission[resource] || [];
+        total += availableActions.length;
+        selected += selectedActions.length;
+      }
+
+      return { selected, total };
+    },
+    [permission, userPermissions],
+  );
+
   // Select all permissions for all resources in a category
   const selectAllForCategory = useCallback(
     (category: string) => {
@@ -210,6 +232,8 @@ export function RolePermissionBuilder({
       <div className="space-y-3">
         {Object.entries(resourceCategories).map(([category, resources]) => {
           const isCategorySelected = isCategoryFullySelected(category);
+          const { selected: catSelected, total: catTotal } =
+            getCategoryCounts(category);
 
           return (
             <Card key={category} className="gap-0 p-3">
@@ -245,6 +269,9 @@ export function RolePermissionBuilder({
                   type="button"
                 >
                   <span className="font-semibold text-sm">{category}</span>
+                  <span className="text-xs text-muted-foreground ml-2">
+                    {catSelected}/{catTotal}
+                  </span>
                 </button>
               </div>
 

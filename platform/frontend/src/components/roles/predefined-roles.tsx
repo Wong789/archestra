@@ -3,15 +3,20 @@ import {
   type PredefinedRoleName,
   roleDescriptions,
 } from "@shared";
-import { Shield } from "lucide-react";
+import { Copy, Shield } from "lucide-react";
+import { PermissionButton } from "@/components/ui/permission-button";
 
 type Role = archestraApiTypes.GetRoleResponses["200"];
 
 interface PredefinedRolesProps {
   predefinedRoles: Role[];
+  onCopy?: (role: Role) => void;
 }
 
-export function PredefinedRoles({ predefinedRoles }: PredefinedRolesProps) {
+export function PredefinedRoles({
+  predefinedRoles,
+  onCopy,
+}: PredefinedRolesProps) {
   if (predefinedRoles.length === 0) {
     return null;
   }
@@ -39,6 +44,17 @@ export function PredefinedRoles({ predefinedRoles }: PredefinedRolesProps) {
                   )}
                 </div>
               </div>
+              {onCopy && (
+                <PermissionButton
+                  permissions={{ ac: ["create"] }}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onCopy(role)}
+                >
+                  <Copy className="mr-1 h-4 w-4" />
+                  Copy
+                </PermissionButton>
+              )}
             </div>
           );
         })}
