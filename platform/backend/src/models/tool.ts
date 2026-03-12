@@ -540,19 +540,23 @@ class ToolModel {
     const toolsToInsert: InsertTool[] = [];
     const resultTools: Tool[] = [];
 
+    // Collect meta-update promises so they run in parallel instead of N+1 sequential UPDATEs.
+    const metaUpdatePromises: Promise<Tool>[] = [];
+
     for (const tool of tools) {
       const existingTool = existingToolsByName.get(tool.name);
       if (existingTool) {
-        // Update meta on existing tools if it changed (e.g. after adding _meta.ui support)
         const metaChanged =
           JSON.stringify(existingTool.meta) !== JSON.stringify(tool.meta);
         if (metaChanged && tool.meta) {
-          const [updated] = await db
-            .update(schema.toolsTable)
-            .set({ meta: tool.meta, updatedAt: new Date() })
-            .where(eq(schema.toolsTable.id, existingTool.id))
-            .returning();
-          resultTools.push(updated ?? existingTool);
+          metaUpdatePromises.push(
+            db
+              .update(schema.toolsTable)
+              .set({ meta: tool.meta, updatedAt: new Date() })
+              .where(eq(schema.toolsTable.id, existingTool.id))
+              .returning()
+              .then(([updated]) => updated ?? existingTool),
+          );
         } else {
           resultTools.push(existingTool);
         }
@@ -566,6 +570,10 @@ class ToolModel {
           agentId: null,
         });
       }
+    }
+
+    if (metaUpdatePromises.length > 0) {
+      resultTools.push(...(await Promise.all(metaUpdatePromises)));
     }
 
     // Bulk insert new tools if any
@@ -1177,6 +1185,9 @@ class ToolModel {
     const unchanged: Tool[] = [];
     const toolsToInsert: InsertTool[] = [];
 
+    // Collect update promises so they run in parallel instead of N+1 sequential UPDATEs.
+    const syncUpdatePromises: Promise<Tool | null>[] = [];
+
     for (const tool of tools) {
       // Use rawToolName if provided, otherwise extract from the slugified name
       // rawToolName is the original name from the MCP server (e.g., "generate_text")
@@ -1216,22 +1227,20 @@ class ToolModel {
           parametersChanged ||
           metaChanged
         ) {
-          // Update existing tool (including rename if catalog name changed)
-          const [updatedTool] = await db
-            .update(schema.toolsTable)
-            .set({
-              name: tool.name, // This handles renaming when catalog name changes
-              description: tool.description,
-              parameters: tool.parameters,
-              meta: tool.meta,
-              updatedAt: new Date(),
-            })
-            .where(eq(schema.toolsTable.id, existingTool.id))
-            .returning();
-
-          if (updatedTool) {
-            updated.push(updatedTool);
-          }
+          syncUpdatePromises.push(
+            db
+              .update(schema.toolsTable)
+              .set({
+                name: tool.name,
+                description: tool.description,
+                parameters: tool.parameters,
+                meta: tool.meta,
+                updatedAt: new Date(),
+              })
+              .where(eq(schema.toolsTable.id, existingTool.id))
+              .returning()
+              .then(([updatedTool]) => updatedTool ?? null),
+          );
         } else {
           unchanged.push(existingTool);
         }
@@ -1245,6 +1254,13 @@ class ToolModel {
           catalogId: tool.catalogId,
           agentId: null,
         });
+      }
+    }
+
+    if (syncUpdatePromises.length > 0) {
+      const results = await Promise.all(syncUpdatePromises);
+      for (const tool of results) {
+        if (tool) updated.push(tool);
       }
     }
 

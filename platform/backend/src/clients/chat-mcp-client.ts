@@ -415,6 +415,8 @@ export async function getChatMcpClient(
   organizationId: string,
   userIsAgentAdmin: boolean,
   conversationId?: string,
+  /** Pre-resolved token to avoid a redundant selectMCPGatewayToken call */
+  preResolvedTokenValue?: string,
 ): Promise<Client | null> {
   const cacheKey = getCacheKey(agentId, userId, conversationId);
 
@@ -462,22 +464,27 @@ export async function getChatMcpClient(
     "🔄 No cached client found - creating new MCP client for agent/user via gateway",
   );
 
-  // Select appropriate token for this user
-  const tokenResult = await selectMCPGatewayToken(
-    agentId,
-    userId,
-    organizationId,
-    userIsAgentAdmin,
-  );
-  if (!tokenResult) {
-    logger.error(
-      { agentId, userId },
-      "No valid team token available for user - cannot connect to MCP Gateway",
+  // Reuse pre-resolved token when available to avoid a redundant DB round-trip
+  // (getChatMcpTools already calls selectMCPGatewayToken before this).
+  let tokenValue: string;
+  if (preResolvedTokenValue) {
+    tokenValue = preResolvedTokenValue;
+  } else {
+    const tokenResult = await selectMCPGatewayToken(
+      agentId,
+      userId,
+      organizationId,
+      userIsAgentAdmin,
     );
-    return null;
+    if (!tokenResult) {
+      logger.error(
+        { agentId, userId },
+        "No valid team token available for user - cannot connect to MCP Gateway",
+      );
+      return null;
+    }
+    tokenValue = tokenResult.tokenValue;
   }
-
-  const { tokenValue } = tokenResult;
 
   // Use new URL format with profileId in path
   const mcpGatewayUrl = `${MCP_GATEWAY_BASE_URL}/${agentId}`;
@@ -707,13 +714,15 @@ export async function getChatMcpTools({
   }
 
   // Still use MCP client for listing tools (via MCP Gateway)
-  // Pass conversationId for per-conversation browser isolation
+  // Pass conversationId for per-conversation browser isolation.
+  // Forward the already-resolved token to avoid a duplicate selectMCPGatewayToken call.
   const client = await getChatMcpClient(
     agentId,
     userId,
     organizationId,
     userIsAgentAdmin,
     conversationId,
+    mcpGwToken.tokenValue,
   );
 
   if (!client) {

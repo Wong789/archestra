@@ -565,12 +565,14 @@ const startSandboxServer = async () => {
 
       // Parse CSP config from query param: ?csp=<url-encoded-json>
       // Validated with a strict schema to prevent injection via malformed objects.
+      // Cap individual domain length (253 = max DNS name) and array size
+      // to prevent oversized CSP headers that could exceed proxy limits.
       const CspSchema = z
         .object({
-          connectDomains: z.array(z.string()).optional(),
-          resourceDomains: z.array(z.string()).optional(),
-          frameDomains: z.array(z.string()).optional(),
-          baseUriDomains: z.array(z.string()).optional(),
+          connectDomains: z.array(z.string().max(253)).max(20).optional(),
+          resourceDomains: z.array(z.string().max(253)).max(20).optional(),
+          frameDomains: z.array(z.string().max(253)).max(20).optional(),
+          baseUriDomains: z.array(z.string().max(253)).max(20).optional(),
         })
         .strict();
 
@@ -584,8 +586,15 @@ const startSandboxServer = async () => {
         }
       }
 
-      // Set CSP via HTTP header — tamper-proof unlike meta tags
-      const cspHeader = buildCspHeader(cspConfig);
+      // Set CSP via HTTP header — tamper-proof unlike meta tags.
+      // frame-ancestors restricts which origins can embed this sandbox iframe,
+      // complementing the JS-side referrer check which is unreliable under
+      // Referrer-Policy: no-referrer or nested iframe scenarios.
+      const frameAncestors =
+        config.mcpSandbox.allowedOrigins.length > 0
+          ? config.mcpSandbox.allowedOrigins.join(" ")
+          : "'self'";
+      const cspHeader = `${buildCspHeader(cspConfig)}; frame-ancestors ${frameAncestors}`;
       void reply.header("Content-Security-Policy", cspHeader);
 
       // Prevent caching to ensure fresh CSP on each load

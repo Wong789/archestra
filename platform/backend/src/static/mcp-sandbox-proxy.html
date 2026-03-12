@@ -160,7 +160,14 @@ window.addEventListener("message", async (event) => {
     if (event.data && event.data.method === RESOURCE_READY_NOTIFICATION) {
       const { html, sandbox, permissions } = event.data.params;
       if (typeof sandbox === "string") {
-        inner.setAttribute("sandbox", sandbox);
+        // Only allow known-safe sandbox tokens to prevent a compromised MCP
+        // server from injecting e.g. allow-top-navigation to escape the sandbox.
+        const ALLOWED_SANDBOX_TOKENS = new Set([
+          "allow-scripts", "allow-same-origin", "allow-forms",
+          "allow-popups", "allow-downloads", "allow-modals",
+        ]);
+        const filtered = sandbox.split(" ").filter(t => ALLOWED_SANDBOX_TOKENS.has(t)).join(" ");
+        inner.setAttribute("sandbox", filtered);
       }
       // Set Permission Policy allow attribute if permissions are requested
       const allowAttribute = buildAllowAttribute(permissions);

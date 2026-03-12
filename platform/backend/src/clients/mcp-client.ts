@@ -1616,12 +1616,21 @@ class McpClient {
   }
 
   /**
-   * Create a timeout promise
+   * Race a promise against a timeout, clearing the timer when the primary
+   * promise settles to prevent dangling timers under high throughput.
    */
-  private createTimeout(ms: number, message: string): Promise<never> {
-    return new Promise((_, reject) => {
-      setTimeout(() => reject(new Error(message)), ms);
+  private raceWithTimeout<T>(
+    promise: Promise<T>,
+    ms: number,
+    message: string,
+  ): Promise<T> {
+    let timerId: ReturnType<typeof setTimeout>;
+    const timeout = new Promise<never>((_, reject) => {
+      timerId = setTimeout(() => reject(new Error(message)), ms);
     });
+    return Promise.race([promise, timeout]).finally(() =>
+      clearTimeout(timerId),
+    );
   }
 
   /**
@@ -1667,16 +1676,18 @@ class McpClient {
         );
 
         // Connect with timeout
-        await Promise.race([
+        await this.raceWithTimeout(
           client.connect(transport),
-          this.createTimeout(30000, "Connection timeout after 30 seconds"),
-        ]);
+          30000,
+          "Connection timeout after 30 seconds",
+        );
 
         // List tools with timeout
-        const toolsResult = await Promise.race([
+        const toolsResult = await this.raceWithTimeout(
           client.listTools(),
-          this.createTimeout(30000, "List tools timeout after 30 seconds"),
-        ]);
+          30000,
+          "List tools timeout after 30 seconds",
+        );
 
         // Close connection (we just needed the tools)
         await client.close();
@@ -1742,28 +1753,31 @@ class McpClient {
     );
 
     try {
-      await Promise.race([
+      await this.raceWithTimeout(
         client.connect(transport),
-        this.createTimeout(30000, "Connection timeout after 30 seconds"),
-      ]);
+        30000,
+        "Connection timeout after 30 seconds",
+      );
 
       if (method === "tools/list") {
-        return await Promise.race([
+        return await this.raceWithTimeout(
           client.listTools(),
-          this.createTimeout(30000, "List tools timeout"),
-        ]);
+          30000,
+          "List tools timeout",
+        );
       }
 
       if (!params.toolName) {
         throw new Error("toolName is required for tools/call");
       }
-      return await Promise.race([
+      return await this.raceWithTimeout(
         client.callTool({
           name: params.toolName,
           arguments: params.toolArguments ?? {},
         }),
-        this.createTimeout(60000, "Tool call timeout"),
-      ]);
+        60000,
+        "Tool call timeout",
+      );
     } finally {
       await client.close().catch(() => {});
     }
