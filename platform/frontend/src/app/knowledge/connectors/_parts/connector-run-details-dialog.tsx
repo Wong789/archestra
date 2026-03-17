@@ -3,6 +3,7 @@
 import { ConnectorStatusBadge } from "@/app/knowledge/knowledge-bases/_parts/connector-status-badge";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -30,7 +31,7 @@ export function ConnectorRunDetailsDialog({
         if (!open) onClose();
       }}
     >
-      <DialogContent className="max-w-3xl p-8">
+      <DialogContent className="max-w-3xl">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             Sync Run Details
@@ -39,7 +40,7 @@ export function ConnectorRunDetailsDialog({
         </DialogHeader>
 
         {run && (
-          <div className="flex flex-col gap-4">
+          <DialogBody className="flex flex-col gap-4">
             {/* Run metadata */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
               <div>
@@ -101,7 +102,7 @@ export function ConnectorRunDetailsDialog({
                 </pre>
               </div>
             )}
-          </div>
+          </DialogBody>
         )}
       </DialogContent>
     </Dialog>

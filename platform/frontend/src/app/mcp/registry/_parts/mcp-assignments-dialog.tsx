@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -415,7 +416,7 @@ export function McpAssignmentsDialog({
           </div>
         ) : (
           <>
-            <div className="flex-1 overflow-y-auto space-y-4">
+            <DialogBody className="space-y-4">
               {/* MCP Gateways Section */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium">MCP Gateways</Label>
@@ -500,7 +501,7 @@ export function McpAssignmentsDialog({
                   </div>
                 )}
               </div>
-            </div>
+            </DialogBody>
 
             {/* Sticky Save Button */}
             <div className="pt-4 border-t mt-4">

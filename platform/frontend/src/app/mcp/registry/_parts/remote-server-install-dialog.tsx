@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogFooter,
   DialogForm,
@@ -265,7 +266,7 @@ export function RemoteServerInstallDialog({
         </DialogHeader>
 
         <DialogForm onSubmit={handleConfirm}>
-          <div className="grid gap-6 py-4">
+          <DialogBody className="grid gap-6">
             {isReauth && (
               <Alert className="border-amber-500/50 bg-amber-500/10">
                 <AlertTriangle className="h-4 w-4 text-amber-500" />
@@ -446,7 +447,7 @@ export function RemoteServerInstallDialog({
                 </div>
               </div>
             )}
-          </div>
+          </DialogBody>
 
           <DialogFooter>
             {canInstall && (

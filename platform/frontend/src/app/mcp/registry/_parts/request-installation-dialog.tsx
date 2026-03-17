@@ -6,6 +6,7 @@ import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -53,7 +54,7 @@ export function RequestInstallationDialog({
 
         <DialogForm onSubmit={handleSubmit}>
           {server && (
-            <div className="space-y-4 py-4">
+            <DialogBody className="space-y-4">
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Server</Label>
                 <div className="p-3 border rounded-md bg-muted/50">
@@ -90,7 +91,7 @@ export function RequestInstallationDialog({
                   rows={4}
                 />
               </div>
-            </div>
+            </DialogBody>
           )}
 
           <DialogFooter>

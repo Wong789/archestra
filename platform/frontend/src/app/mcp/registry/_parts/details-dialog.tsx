@@ -27,12 +27,12 @@ import remarkGfm from "remark-gfm";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 
 interface DetailsDialogProps {
@@ -165,7 +165,7 @@ export function DetailsDialog({ server, onClose }: DetailsDialogProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden">
+      <DialogContent className="max-w-4xl">
         <DialogHeader>
           <DialogTitle>
             {server?.display_name || server?.name || "Server"}
@@ -176,8 +176,8 @@ export function DetailsDialog({ server, onClose }: DetailsDialogProps) {
             )}
           </DialogDescription>
         </DialogHeader>
-        <ScrollArea className="h-[60vh] w-full py-4">
-          <div className="space-y-6 pr-4">
+        <DialogBody>
+          <div className="space-y-6">
             <section>
               <h3 className="text-xl font-semibold mb-3 flex items-center gap-2">
                 <Info className="h-5 w-5" />
@@ -713,7 +713,7 @@ export function DetailsDialog({ server, onClose }: DetailsDialogProps) {
               </>
             )}
           </div>
-        </ScrollArea>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

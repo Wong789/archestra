@@ -4,6 +4,7 @@ import { ToolCallPolicies } from "@/app/mcp/tool-policies/_parts/tool-call-polic
 import { ToolResultPolicies } from "@/app/mcp/tool-policies/_parts/tool-result-policies";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -38,14 +39,14 @@ export function EditPolicyDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Edit Policies</DialogTitle>
           <DialogDescription>
             Configure policies for {toolName}
           </DialogDescription>
         </DialogHeader>
-        <div className="mt-2 space-y-4">
+        <DialogBody className="space-y-4">
           {agentTool ? (
             <>
               <ToolCallPolicies tool={agentTool.tool} />
@@ -56,7 +57,7 @@ export function EditPolicyDialog({
               Tool not found or not assigned to this profile.
             </p>
           )}
-        </div>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

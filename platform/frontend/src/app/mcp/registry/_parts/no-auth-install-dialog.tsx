@@ -6,6 +6,7 @@ import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -75,7 +76,7 @@ export function NoAuthInstallDialog({
         </DialogHeader>
 
         <DialogForm onSubmit={handleInstall}>
-          <div className="py-4">
+          <DialogBody>
             <SelectMcpServerCredentialTypeAndTeams
               onTeamChange={setSelectedTeamId}
               catalogId={catalogItem?.id}
@@ -83,7 +84,7 @@ export function NoAuthInstallDialog({
               preselectedTeamId={preselectedTeamId}
               personalOnly={personalOnly}
             />
-          </div>
+          </DialogBody>
 
           <DialogFooter>
             {canInstall && (

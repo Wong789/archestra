@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -101,7 +102,7 @@ export function OAuthConfirmationDialog({
             </Alert>
           )}
 
-          <div className="py-4">
+          <DialogBody>
             <SelectMcpServerCredentialTypeAndTeams
               onTeamChange={setSelectedTeamId}
               catalogId={catalogId}
@@ -109,7 +110,7 @@ export function OAuthConfirmationDialog({
               preselectedTeamId={preselectedTeamId}
               personalOnly={personalOnly}
             />
-          </div>
+          </DialogBody>
 
           <DialogFooter className="gap-3 sm:gap-3">
             {canInstall && (

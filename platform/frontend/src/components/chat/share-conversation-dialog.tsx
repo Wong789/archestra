@@ -5,6 +5,7 @@ import { useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -60,7 +61,7 @@ export function ShareConversationDialog({
           <DialogTitle>Chat Visibility</DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-col gap-3 pt-2 overflow-hidden">
+        <DialogBody className="flex flex-col gap-3">
           {/* Private option */}
           <button
             type="button"
@@ -135,7 +136,7 @@ export function ShareConversationDialog({
               "Close"
             )}
           </Button>
-        </div>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

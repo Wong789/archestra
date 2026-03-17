@@ -10,6 +10,7 @@ import { EnvironmentVariablesFormField } from "@/components/environment-variable
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogForm,
@@ -140,7 +141,7 @@ export function CustomServerRequestDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[800px]">
         <DialogHeader>
           <DialogTitle>Request Custom MCP Server Installation</DialogTitle>
           <DialogDescription>
@@ -151,7 +152,7 @@ export function CustomServerRequestDialog({
 
         <Form {...form}>
           <DialogForm onSubmit={form.handleSubmit(onSubmit)}>
-            <div className="space-y-4 py-4">
+            <DialogBody className="space-y-4">
               <FormField
                 control={form.control}
                 name="serverType"
@@ -319,7 +320,7 @@ export function CustomServerRequestDialog({
                   </FormItem>
                 )}
               />
-            </div>
+            </DialogBody>
 
             <DialogStickyFooter>
               <Button type="button" variant="outline" onClick={onClose}>

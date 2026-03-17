@@ -62,6 +62,7 @@ import {
 } from "@/components/ui/card";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -2034,7 +2035,7 @@ function NoApiKeySetup() {
             </DialogDescription>
           </DialogHeader>
           <DialogForm onSubmit={handleCreate}>
-            <div className="py-2">
+            <DialogBody>
               <ChatApiKeyForm
                 mode="full"
                 showConsoleLink
@@ -2042,7 +2043,7 @@ function NoApiKeySetup() {
                 isPending={createMutation.isPending}
                 geminiVertexAiEnabled={geminiVertexAiEnabled}
               />
-            </div>
+            </DialogBody>
             <DialogFooter>
               <Button
                 type="button"
