@@ -7,6 +7,7 @@ import type {
   Team,
   TeamExternalGroup,
   TeamMember,
+  TeamMemberWithUser,
   UpdateTeam,
 } from "@/types";
 import { ApiError } from "@/types";
@@ -256,11 +257,19 @@ class TeamModel {
   /**
    * Get all members of a team
    */
-  static async getTeamMembers(teamId: string): Promise<TeamMember[]> {
+  static async getTeamMembers(teamId: string): Promise<TeamMemberWithUser[]> {
     logger.debug({ teamId }, "TeamModel.getTeamMembers: fetching members");
     const members = await db
-      .select()
+      .select({
+        ...getTableColumns(schema.teamMembersTable),
+        name: schema.usersTable.name,
+        email: schema.usersTable.email,
+      })
       .from(schema.teamMembersTable)
+      .leftJoin(
+        schema.usersTable,
+        eq(schema.teamMembersTable.userId, schema.usersTable.id),
+      )
       .where(eq(schema.teamMembersTable.teamId, teamId));
 
     logger.debug(

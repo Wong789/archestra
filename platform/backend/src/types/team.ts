@@ -10,6 +10,10 @@ import { schema } from "@/database";
 export const SelectTeamMemberSchema = createSelectSchema(
   schema.teamMembersTable,
 );
+export const SelectTeamMemberWithUserSchema = SelectTeamMemberSchema.extend({
+  name: z.string().nullable(),
+  email: z.string().nullable(),
+});
 export const SelectTeamSchema = createSelectSchema(schema.teamsTable).extend({
   members: z.array(SelectTeamMemberSchema).optional(),
 });
@@ -49,6 +53,7 @@ export type Team = z.infer<typeof SelectTeamSchema>;
 export type InsertTeam = z.infer<typeof InsertTeamSchema>;
 export type UpdateTeam = z.infer<typeof UpdateTeamSchema>;
 export type TeamMember = z.infer<typeof SelectTeamMemberSchema>;
+export type TeamMemberWithUser = z.infer<typeof SelectTeamMemberWithUserSchema>;
 export type CreateTeamBody = z.infer<typeof CreateTeamBodySchema>;
 export type UpdateTeamBody = z.infer<typeof UpdateTeamBodySchema>;
 export type AddTeamMemberBody = z.infer<typeof AddTeamMemberBodySchema>;

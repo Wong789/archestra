@@ -11,7 +11,6 @@ import { DialogStickyFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useMembersPaginated } from "@/lib/member.query";
-import { useActiveOrganization } from "@/lib/organization.query";
 
 interface Team {
   id: string;
@@ -25,53 +24,12 @@ interface TeamMembersDialogProps {
   team: Team;
 }
 
-type OrganizationMemberOption = {
-  id?: string;
-  userId: string;
-  role?: string;
-  name?: string | null;
-  email?: string | null;
-  user?: { name?: string | null; email?: string | null } | null;
-};
-
-function getMemberDisplayName(member: unknown): string {
-  if (!member) return "Unknown user";
-
-  const record = member as {
-    userId?: string;
-    name?: string | null;
-    email?: string | null;
-    user?: { name?: string | null; email?: string | null } | null;
-  };
-
-  return (
-    record.user?.name ||
-    record.name ||
-    record.user?.email ||
-    record.email ||
-    record.userId ||
-    "Unknown user"
-  );
-}
-
-function getMemberEmail(member: unknown): string | null {
-  if (!member) return null;
-
-  const record = member as {
-    email?: string | null;
-    user?: { email?: string | null } | null;
-  };
-
-  return record.user?.email || record.email || null;
-}
-
 export function TeamMembersDialog({
   open,
   onOpenChange,
   team,
 }: TeamMembersDialogProps) {
   const queryClient = useQueryClient();
-  const { data: activeOrg } = useActiveOrganization();
   const [memberSearch, setMemberSearch] = useState("");
 
   const { data: teamMembers } = useQuery({
@@ -91,13 +49,9 @@ export function TeamMembersDialog({
     name: memberSearch || undefined,
   });
 
-  // Get organization members to show in dropdown
-  const orgMembers = (activeOrg?.members ?? []) as OrganizationMemberOption[];
   const memberUserIds = new Set(teamMembers?.map((m) => m.userId) || []);
-  const availableMembers = (
-    (membersResponse?.data ?? orgMembers) as OrganizationMemberOption[]
-  ).filter(
-    (member: OrganizationMemberOption) => !memberUserIds.has(member.userId),
+  const availableMembers = (membersResponse?.data ?? []).filter(
+    (member) => !memberUserIds.has(member.userId),
   );
 
   const addMutation = useMutation({
@@ -166,8 +120,8 @@ export function TeamMembersDialog({
               onSearchQueryChange={setMemberSearch}
               items={availableMembers.map((member) => ({
                 value: member.userId,
-                label: getMemberDisplayName(member),
-                description: getMemberEmail(member) || undefined,
+                label: member.name || member.email || member.userId,
+                description: member.email || undefined,
               }))}
               emptyMessage="No matching users found."
             />
@@ -184,35 +138,29 @@ export function TeamMembersDialog({
             </div>
           ) : (
             <div className="space-y-2">
-              {teamMembers.map((member) => {
-                const orgMember = orgMembers.find(
-                  (m: OrganizationMemberOption) => m.userId === member.userId,
-                );
-                return (
-                  <div
-                    key={member.id}
-                    className="flex items-center justify-between rounded-lg border p-3"
-                  >
-                    <div>
-                      <p className="text-sm font-medium">
-                        {getMemberEmail(orgMember) ||
-                          getMemberDisplayName(member)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Role: {member.role}
-                      </p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeMutation.mutate(member.userId)}
-                      disabled={removeMutation.isPending}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+              {teamMembers.map((member) => (
+                <div
+                  key={member.id}
+                  className="flex items-center justify-between rounded-lg border p-3"
+                >
+                  <div>
+                    <p className="text-sm font-medium">
+                      {member.email || member.name || member.userId}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Role: {member.role}
+                    </p>
                   </div>
-                );
-              })}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeMutation.mutate(member.userId)}
+                    disabled={removeMutation.isPending}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              ))}
             </div>
           )}
         </div>
