@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── Mock heavy dependencies before module import ─────────────────────────────
 
-vi.mock("@mcp-ui/client", () => ({
+vi.mock("@modelcontextprotocol/ext-apps/app-bridge", () => ({
   AppBridge: vi.fn().mockImplementation(function (
     this: Record<string, unknown>,
   ) {
@@ -17,15 +17,20 @@ vi.mock("@mcp-ui/client", () => ({
     this.onlistprompts = null;
     this.onloggingmessage = null;
     this.onmessage = null;
+    this.onsizechange = null;
+    this.oninitialized = null;
+    this.onsandboxready = null;
+    this.connect = vi.fn().mockReturnValue(Promise.resolve());
+    this.sendSandboxResourceReady = vi
+      .fn()
+      .mockReturnValue(Promise.resolve());
     this.sendToolInput = vi.fn().mockReturnValue(Promise.resolve());
     this.sendToolInputPartial = vi.fn().mockReturnValue(Promise.resolve());
+    this.sendToolResult = vi.fn().mockReturnValue(Promise.resolve());
     this.setHostContext = vi.fn();
     this.teardownResource = vi.fn().mockReturnValue(Promise.resolve());
   }),
-  // Render as a simple div so we can assert it's present
-  AppFrame: vi.fn(({ html }: { html: string }) => (
-    <div data-testid="app-frame">{html}</div>
-  )),
+  PostMessageTransport: vi.fn(),
 }));
 
 vi.mock("next-themes", () => ({
@@ -33,7 +38,7 @@ vi.mock("next-themes", () => ({
 }));
 
 vi.mock("@/lib/config", () => ({
-  getMcpSandboxBaseUrl: () => "http://localhost:3002",
+  getMcpSandboxBaseUrl: () => "http://localhost:9000",
 }));
 
 // ── Import component under test after mocks ───────────────────────────────────
@@ -66,7 +71,7 @@ describe("McpAppSection", () => {
     expect(screen.getByText("Loading...")).toBeInTheDocument();
   });
 
-  it("renders AppFrame once preloadedResource is provided", async () => {
+  it("renders sandbox iframe once preloadedResource is provided", async () => {
     await act(async () => {
       render(
         <McpAppSection
@@ -76,10 +81,12 @@ describe("McpAppSection", () => {
       );
     });
 
-    expect(screen.getByTestId("app-frame")).toBeInTheDocument();
+    // SandboxIframe creates an iframe element in the DOM
+    const iframe = document.querySelector("iframe");
+    expect(iframe).toBeInTheDocument();
   });
 
-  it("passes html content from preloadedResource to AppFrame", async () => {
+  it("sets correct sandbox attribute without allow-same-origin", async () => {
     await act(async () => {
       render(
         <McpAppSection
@@ -89,10 +96,15 @@ describe("McpAppSection", () => {
       );
     });
 
-    expect(screen.getByTestId("app-frame")).toHaveTextContent("Hello MCP App");
+    const iframe = document.querySelector("iframe");
+    expect(iframe).toBeInTheDocument();
+    const sandbox = iframe?.getAttribute("sandbox");
+    expect(sandbox).toContain("allow-scripts");
+    expect(sandbox).toContain("allow-forms");
+    expect(sandbox).not.toContain("allow-same-origin");
   });
 
-  it("does not show loading spinner once AppFrame is rendered", async () => {
+  it("does not show loading spinner once sandbox iframe is rendered", async () => {
     await act(async () => {
       render(
         <McpAppSection
@@ -132,11 +144,9 @@ describe("McpAppContainer (via McpAppSection)", () => {
   it("shows close button after switching to fullscreen mode", async () => {
     const user = userEvent.setup();
 
-    // Render with a toolInput that triggers AppFrame's onDisplayModeChange
-    // We directly simulate the mode change by clicking the fullscreen trigger
-    // exposed via AppBridge's onrequestdisplaymode. Since AppBridge is mocked,
-    // we call the handler injected into the mock via the bridge's setter.
-    const { AppBridge } = await import("@mcp-ui/client");
+    const { AppBridge } = await import(
+      "@modelcontextprotocol/ext-apps/app-bridge"
+    );
     // biome-ignore lint/suspicious/noExplicitAny: accessing mock internals
     const bridgeInstances: any[] = [];
     (AppBridge as ReturnType<typeof vi.fn>).mockImplementation(function (
@@ -153,8 +163,16 @@ describe("McpAppContainer (via McpAppSection)", () => {
       this.onlistprompts = null;
       this.onloggingmessage = null;
       this.onmessage = null;
+      this.onsizechange = null;
+      this.oninitialized = null;
+      this.onsandboxready = null;
+      this.connect = vi.fn().mockReturnValue(Promise.resolve());
+      this.sendSandboxResourceReady = vi
+        .fn()
+        .mockReturnValue(Promise.resolve());
       this.sendToolInput = vi.fn().mockReturnValue(Promise.resolve());
       this.sendToolInputPartial = vi.fn().mockReturnValue(Promise.resolve());
+      this.sendToolResult = vi.fn().mockReturnValue(Promise.resolve());
       this.setHostContext = vi.fn();
       this.teardownResource = vi.fn().mockReturnValue(Promise.resolve());
       bridgeInstances.push(this);
@@ -217,29 +235,5 @@ describe("McpAppSection error handling", () => {
     });
 
     fetchSpy.mockRestore();
-  });
-
-  it("catches render errors via error boundary", async () => {
-    const { AppFrame } = await import("@mcp-ui/client");
-    (AppFrame as ReturnType<typeof vi.fn>).mockImplementation(() => {
-      throw new Error("AppFrame render crash");
-    });
-
-    // Suppress React error boundary console noise
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-
-    await act(async () => {
-      render(
-        <McpAppSection
-          {...defaultProps}
-          preloadedResource={preloadedResource}
-        />,
-      );
-    });
-
-    expect(screen.getByText(/MCP App crashed/i)).toBeInTheDocument();
-    expect(screen.getByText(/AppFrame render crash/i)).toBeInTheDocument();
-
-    consoleSpy.mockRestore();
   });
 });

@@ -52,7 +52,6 @@ This will start the platform with:
 
 - **Admin UI** available at <http://localhost:3000>
 - **API** available at <http://localhost:9000>
-- **MCP Apps Sandbox** available at <http://localhost:3002> (used by MCP App iframes)
 - **Auth Secret** auto-generated and saved to `/app/data/.auth_secret` (persisted across restarts)
 - **MCP Kubernetes Orchestrator** via KinD
 
@@ -460,8 +459,8 @@ archestra:
 After installation, access the platform using port forwarding:
 
 ```bash
-# Forward the API (port 9000), Admin UI (port 3000), and MCP Apps sandbox (port 3002)
-kubectl --namespace archestra port-forward svc/archestra-platform 9000:9000 3000:3000 3002:3002
+# Forward the API (port 9000) and Admin UI (port 3000)
+kubectl --namespace archestra port-forward svc/archestra-platform 9000:9000 3000:3000
 ```
 
 Then visit:
@@ -735,11 +734,7 @@ These environment variables set the default base URL for each LLM provider. Per-
 
 ### MCP Apps Sandbox
 
-- **`ARCHESTRA_MCP_SANDBOX_PORT`** / **`NEXT_PUBLIC_ARCHESTRA_MCP_SANDBOX_PORT`** - Port for the MCP sandbox proxy server used for CSP isolation of MCP App iframes in chat.
-  - Default: `3002`
-  - Must differ from the main backend port (9000) and MCP Catalog API dev port (3001)
-  - Both variables must be set to the same value when overriding
-  - `NEXT_PUBLIC_` is a build-time env var — changing the port in Docker/Helm requires a frontend container rebuild
+The MCP App sandbox proxy is served from the main backend server under `/_sandbox/`. No separate port or configuration is needed. Iframe isolation is enforced via the `sandbox` attribute (opaque origin) and CSP headers.
 
 Origin restriction for the sandbox is driven by **`ARCHESTRA_FRONTEND_URL`** and **`ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`** (the same variables that control CORS and trusted origins for the main backend). When either variable is set, only those origins may embed the sandbox iframe and communicate with it via `postMessage`. When neither is set (local development), all origins are accepted.
 

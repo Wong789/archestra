@@ -79,7 +79,11 @@ if (!EXPECTED_HOST_ORIGIN) {
   }
 }
 
-const OWN_ORIGIN = new URL(window.location.href).origin;
+// Detect opaque origin (sandbox without allow-same-origin on this iframe).
+// With opaque origin, new URL(location.href).origin still returns the URL's origin,
+// but window.origin and postMessage event.origin are "null" (the string).
+const OWN_ORIGIN = window.origin;
+const IS_OPAQUE_ORIGIN = OWN_ORIGIN === "null";
 
 // Security self-test: verify iframe isolation is working correctly.
 // This MUST throw a SecurityError -- if `window.top` is accessible, the sandbox
@@ -96,22 +100,13 @@ const OWN_ORIGIN = new URL(window.location.href).origin;
 }
 
 // Double-iframe sandbox architecture: THIS file is the outer sandbox proxy
-// iframe on a separate origin. It creates an inner iframe for untrusted HTML
-// content. Per the specification, the Host and the Sandbox MUST have different
-// origins.
+// iframe with an opaque origin (single-port setup, no allow-same-origin).
+// It creates an inner iframe for untrusted HTML content.
 const inner = document.createElement("iframe");
 inner.style = "width:100%; height:100%; border:none;";
-// SECURITY NOTE: allow-same-origin + allow-scripts is a known risky combination.
-// It allows the inner frame's script to access window.frameElement and potentially
-// strip its own sandbox attribute. This is intentional here because:
-//   1. allow-same-origin is required for document.write() to assign OWN_ORIGIN to
-//      the inner frame, enabling the origin check in the message listener below.
-//   2. The outer proxy (THIS file) is itself sandboxed by the parent page without
-//      allow-same-origin, so any escape from the inner sandbox is still bounded by
-//      the outer proxy's restrictions (no allow-top-navigation, no storage access
-//      to the host page's origin).
-// Mitigations: CSP on this file (set via HTTP header by server.ts), and the outer
-// proxy's sandbox contains the blast radius.
+// allow-same-origin on the inner iframe makes it inherit the outer's origin.
+// With opaque origin, this means both share the same unique opaque origin —
+// enabling document.write() access while keeping both isolated from the host.
 inner.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms");
 // Note: allow attribute is set later when receiving sandbox-resource-ready notification
 // based on the permissions requested by the app
@@ -190,13 +185,18 @@ window.addEventListener("message", async (event) => {
       }
     } else {
       if (inner && inner.contentWindow) {
-        inner.contentWindow.postMessage(event.data, OWN_ORIGIN);
+        // With opaque origin, postMessage targetOrigin cannot be a specific origin
+        // (opaque origins are unique and unmatchable). Use "*" — safe because the
+        // inner iframe is sandboxed and shares our opaque origin.
+        inner.contentWindow.postMessage(event.data, IS_OPAQUE_ORIGIN ? "*" : OWN_ORIGIN);
       }
     }
   } else if (event.source === inner.contentWindow) {
     if(location.hostname === "localhost") {
       console.debug('[Sandbox] Message from inner iframe:', event.data)
     }
+    // With opaque origin, event.origin from the inner iframe is "null" (the string).
+    // Both outer and inner share the same opaque origin, so "null" === "null" is valid.
     if (event.origin !== OWN_ORIGIN) {
       console.error(
         "[Sandbox] Rejecting message from inner iframe with unexpected origin:",

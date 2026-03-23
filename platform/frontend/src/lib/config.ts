@@ -106,25 +106,11 @@ export const getWebSocketUrl = (): string => {
 
 /**
  * Get the MCP sandbox proxy base URL.
- * The sandbox server runs on the same host as the backend but on a different port
- * for iframe origin isolation.
- *
- * Uses NEXT_PUBLIC_ARCHESTRA_MCP_SANDBOX_PORT (build-time env var) because the
- * sandbox URL is infrastructure config required before /api/config loads — same
- * category as NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL. Changing the port in
- * Docker/Helm deployments requires a frontend container rebuild.
+ * The sandbox is served from the main backend under /_sandbox/ (single-port setup).
+ * Iframe isolation comes from the sandbox attribute (no allow-same-origin → opaque origin).
  */
 export const getMcpSandboxBaseUrl = (): string => {
-  try {
-    const backendUrl = new URL(getBackendBaseUrl());
-    const sandboxPort = env("NEXT_PUBLIC_ARCHESTRA_MCP_SANDBOX_PORT") || "3002";
-    backendUrl.port = sandboxPort;
-    backendUrl.pathname = "";
-    return backendUrl.origin;
-  } catch {
-    // Invalid backend URL — fall back to default sandbox origin
-    return "http://localhost:3002";
-  }
+  return getBackendBaseUrl();
 };
 
 /**

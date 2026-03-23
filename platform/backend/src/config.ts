@@ -699,7 +699,6 @@ const config = {
     token: process.env.ARCHESTRA_HASHICORP_VAULT_TOKEN || DEFAULT_VAULT_TOKEN,
   },
   mcpSandbox: {
-    port: Number(process.env.ARCHESTRA_MCP_SANDBOX_PORT) || 3002,
     /** Path to the sandbox proxy HTML file (co-located in backend static dir). */
     filePath: path.resolve(__dirname, "static/mcp-sandbox-proxy.html"),
     /**

@@ -510,21 +510,12 @@ export function buildCspHeader(csp?: McpUiResourceCsp): string {
   return directives.join("; ");
 }
 
-let sandboxServerInstance: Awaited<
-  ReturnType<typeof createFastifyInstance>
-> | null = null;
-
 /**
- * Start a dedicated sandbox server on a separate port for MCP App iframe isolation.
- *
- * Serves the sandbox proxy HTML with dynamic CSP headers based on the ?csp= query param.
- * Must be on a different origin (port) than the main app for proper iframe sandboxing.
+ * Read and prepare the sandbox proxy HTML at startup.
+ * Returns null if the file is not found (non-fatal — sandbox route won't be registered).
  */
-const startSandboxServer = async () => {
-  const { port: sandboxPort, filePath } = config.mcpSandbox;
-
-  // Read sandbox HTML file at startup
-  let sandboxHtml: string;
+const loadSandboxHtml = (): string | null => {
+  const { filePath } = config.mcpSandbox;
   try {
     const rawHtml = readFileSync(filePath, "utf-8");
     // Inject allowed origins at startup (comes from env config, doesn't change at runtime).
@@ -533,29 +524,50 @@ const startSandboxServer = async () => {
     const safeJson = JSON.stringify(config.mcpSandbox.allowedOrigins)
       .replace(/</g, "\\u003c")
       .replace(/>/g, "\\u003e");
-    sandboxHtml = rawHtml.replace("__ARCHESTRA_ALLOWED_ORIGINS__", safeJson);
+    return rawHtml.replace("__ARCHESTRA_ALLOWED_ORIGINS__", safeJson);
   } catch (err) {
     logger.warn(
       { err, filePath },
-      "MCP sandbox proxy HTML not found — sandbox server will not start",
+      "MCP sandbox proxy HTML not found — /_sandbox/ route will not be registered",
     );
-    return;
+    return null;
+  }
+};
+
+const sandboxHtml = loadSandboxHtml();
+
+/** CSP query param schema — strict to prevent injection via malformed objects. */
+const SandboxCspSchema = z
+  .object({
+    connectDomains: z.array(z.string().max(253)).max(20).optional(),
+    resourceDomains: z.array(z.string().max(253)).max(20).optional(),
+    frameDomains: z.array(z.string().max(253)).max(20).optional(),
+    baseUriDomains: z.array(z.string().max(253)).max(20).optional(),
+  })
+  .strict();
+
+/**
+ * Register the sandbox proxy route on the main Fastify instance.
+ *
+ * Serves the sandbox proxy HTML under /_sandbox/ with dynamic CSP headers.
+ * Isolation comes from the iframe sandbox attribute (no allow-same-origin)
+ * set by the frontend, giving the iframe an opaque origin.
+ */
+const registerSandboxRoute = (
+  fastify: ReturnType<typeof createFastifyInstance>,
+) => {
+  if (!sandboxHtml) return;
+
+  if (process.env.ARCHESTRA_MCP_SANDBOX_PORT) {
+    logger.warn(
+      "ARCHESTRA_MCP_SANDBOX_PORT is deprecated and no longer used. " +
+        "The sandbox is now served from the main backend on /_sandbox/. " +
+        "Remove this env var from your configuration.",
+    );
   }
 
-  const sandboxServer = createFastifyInstance();
-  sandboxServerInstance = sandboxServer;
-
-  // CORS: allow the frontend origin to load the sandbox iframe.
-  // Uses the same configured origins as the main server (derived from
-  // ARCHESTRA_FRONTEND_URL / ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS).
-  await sandboxServer.register(fastifyCors, {
-    origin: corsOrigins,
-    methods: ["GET"],
-  });
-
-  // Serve sandbox.html with CSP from query params
-  sandboxServer.get(
-    "/mcp-sandbox-proxy.html",
+  fastify.get(
+    "/_sandbox/mcp-sandbox-proxy.html",
     {
       schema: {
         querystring: z.object({
@@ -566,38 +578,21 @@ const startSandboxServer = async () => {
     async (request, reply) => {
       const { csp: cspParam } = request.query as { csp?: string };
 
-      // Parse CSP config from query param: ?csp=<url-encoded-json>
-      // Validated with a strict schema to prevent injection via malformed objects.
-      // Cap individual domain length (253 = max DNS name) and array size
-      // to prevent oversized CSP headers that could exceed proxy limits.
-      const CspSchema = z
-        .object({
-          connectDomains: z.array(z.string().max(253)).max(20).optional(),
-          resourceDomains: z.array(z.string().max(253)).max(20).optional(),
-          frameDomains: z.array(z.string().max(253)).max(20).optional(),
-          baseUriDomains: z.array(z.string().max(253)).max(20).optional(),
-        })
-        .strict();
-
       let cspConfig: McpUiResourceCsp | undefined;
       if (cspParam) {
         try {
           const parsed = JSON.parse(cspParam);
-          cspConfig = CspSchema.parse(parsed);
+          cspConfig = SandboxCspSchema.parse(parsed);
         } catch {
           request.log.warn("Invalid CSP query param — ignoring");
         }
       }
 
       // Set CSP via HTTP header — tamper-proof unlike meta tags.
-      // frame-ancestors restricts which origins can embed this sandbox iframe,
-      // complementing the JS-side referrer check which is unreliable under
-      // Referrer-Policy: no-referrer or nested iframe scenarios.
+      // frame-ancestors restricts which origins can embed this sandbox iframe.
       // When allowedOrigins is configured, restrict framing to those origins.
       // When empty (no ARCHESTRA_FRONTEND_URL set), allow any ancestor — matching
-      // the permissive CORS behaviour used for dev/open deployments. Using 'self'
-      // here would block the frontend (port 3000) from framing the sandbox (port 3002)
-      // since they are different origins.
+      // the permissive CORS behaviour used for dev/open deployments.
       const frameAncestors =
         config.mcpSandbox.allowedOrigins.length > 0
           ? config.mcpSandbox.allowedOrigins.join(" ")
@@ -614,16 +609,6 @@ const startSandboxServer = async () => {
       return reply.send(sandboxHtml);
     },
   );
-
-  // Catch-all: only sandbox.html is served on this port
-  sandboxServer.setNotFoundHandler((_request, reply) => {
-    return reply
-      .status(404)
-      .send("Only mcp-sandbox-proxy.html is served on this port");
-  });
-
-  await sandboxServer.listen({ port: sandboxPort, host });
-  sandboxServer.log.info(`MCP Sandbox server started on port ${sandboxPort}`);
 };
 
 const startMcpServerRuntime = async (
@@ -767,8 +752,9 @@ const startWebServer = async () => {
     // Start metrics server
     await startMetricsServer();
 
-    // Start MCP sandbox server (separate origin for iframe isolation)
-    await startSandboxServer();
+    // Register sandbox proxy route on the main server (single-port setup).
+    // Iframe isolation comes from the sandbox attribute (no allow-same-origin → opaque origin).
+    registerSandboxRoute(fastify);
 
     logger.info(
       `Observability initialized with ${labelKeys.length} agent label keys`,
@@ -890,12 +876,6 @@ const startWebServer = async () => {
         if (metricsServerInstance) {
           await metricsServerInstance.close();
           fastify.log.info("Metrics server closed");
-        }
-
-        // Close sandbox server (releases sandbox port)
-        if (sandboxServerInstance) {
-          await sandboxServerInstance.close();
-          fastify.log.info("Sandbox server closed");
         }
 
         // Close main server (releases port 9000)
