@@ -1,4 +1,7 @@
-import { AppBridge, AppFrame, type AppFrameProps } from "@mcp-ui/client";
+import {
+  AppBridge,
+  PostMessageTransport,
+} from "@modelcontextprotocol/ext-apps/app-bridge";
 import type {
   McpUiDisplayMode,
   McpUiResourceCsp,
@@ -12,8 +15,9 @@ import { Button } from "@/components/ui/button";
 import { getMcpSandboxBaseUrl } from "@/lib/config";
 import { cn } from "@/lib/utils";
 
-/** CallToolResult as expected by AppFrame/AppBridge — extracted to avoid a direct SDK dependency. */
-type McpCallToolResult = NonNullable<AppFrameProps["toolResult"]>;
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+
+type McpCallToolResult = CallToolResult;
 
 /**
  * Shape of MCP tool output stored by the backend in the AI SDK's tool result.
@@ -444,8 +448,176 @@ function McpAppContainer({
   );
 }
 
+const SANDBOX_PROXY_READY = "ui/notifications/sandbox-proxy-ready";
+const SANDBOX_READY_TIMEOUT = 10_000;
+
 /**
- * Renders an MCP App using AppBridge + AppFrame directly (instead of AppRenderer)
+ * Creates a sandboxed iframe pointing to the sandbox proxy HTML and connects
+ * an AppBridge to it.
+ *
+ * Replaces @mcp-ui/client's AppFrame which hardcodes allow-same-origin on the
+ * iframe — incompatible with single-port deployments where the sandbox must
+ * have an opaque origin to prevent access to the host's cookies/storage.
+ */
+function SandboxIframe({
+  html,
+  sandboxUrl,
+  csp,
+  permissions,
+  appBridge,
+  toolInput,
+  toolResult,
+  onError,
+  onSizeChanged,
+}: {
+  html: string;
+  sandboxUrl: URL;
+  csp?: McpUiResourceCsp;
+  permissions?: McpUiResourcePermissions;
+  appBridge: AppBridge;
+  toolInput?: Record<string, unknown>;
+  toolResult?: McpCallToolResult;
+  onError?: (error: Error) => void;
+  onSizeChanged?: (size: { width?: number; height?: number }) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const [ready, setReady] = useState(false);
+  const [initialized, setInitialized] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const onSizeChangedRef = useRef(onSizeChanged);
+  const onErrorRef = useRef(onError);
+
+  useEffect(() => {
+    onSizeChangedRef.current = onSizeChanged;
+    onErrorRef.current = onError;
+  });
+
+  // Create iframe, wait for proxy-ready, connect bridge
+  useEffect(() => {
+    let cancelled = false;
+    const container = containerRef.current;
+    if (!container) return;
+
+    const iframe = document.createElement("iframe");
+    iframe.style.width = "100%";
+    iframe.style.height = "600px";
+    iframe.style.border = "none";
+    iframe.style.backgroundColor = "transparent";
+    // No allow-same-origin → opaque origin for security isolation
+    iframe.setAttribute("sandbox", "allow-scripts allow-forms allow-popups");
+    iframe.src = sandboxUrl.href;
+    iframeRef.current = iframe;
+
+    // Wait for sandbox-proxy-ready message from the iframe
+    const timeout = setTimeout(() => {
+      if (!cancelled) {
+        const err = new Error("Timed out waiting for sandbox proxy iframe");
+        setError(err);
+        onErrorRef.current?.(err);
+      }
+    }, SANDBOX_READY_TIMEOUT);
+
+    const onMessage = (event: MessageEvent) => {
+      if (
+        event.source === iframe.contentWindow &&
+        event.data?.method === SANDBOX_PROXY_READY
+      ) {
+        if (cancelled) return;
+        clearTimeout(timeout);
+        window.removeEventListener("message", onMessage);
+
+        // Connect AppBridge via PostMessageTransport
+        const transport = new PostMessageTransport(
+          iframe.contentWindow!,
+          iframe.contentWindow!,
+        );
+        appBridge
+          .connect(transport)
+          .then(() => {
+            if (!cancelled) setReady(true);
+          })
+          .catch((err) => {
+            if (!cancelled) {
+              const error =
+                err instanceof Error ? err : new Error(String(err));
+              setError(error);
+              onErrorRef.current?.(error);
+            }
+          });
+      }
+    };
+
+    window.addEventListener("message", onMessage);
+    container.appendChild(iframe);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+      window.removeEventListener("message", onMessage);
+      iframe.remove();
+      iframeRef.current = null;
+    };
+  }, [sandboxUrl.href, appBridge]);
+
+  // Set up size change and initialized handlers
+  useEffect(() => {
+    if (!ready) return;
+
+    appBridge.onsizechange = (params) => {
+      onSizeChangedRef.current?.(params);
+      const iframe = iframeRef.current;
+      if (iframe) {
+        if (params.width !== undefined)
+          iframe.style.width = `${params.width}px`;
+        if (params.height !== undefined)
+          iframe.style.height = `${params.height}px`;
+      }
+    };
+
+    appBridge.oninitialized = () => {
+      setInitialized(true);
+    };
+  }, [ready, appBridge]);
+
+  // Send HTML to sandbox once connected
+  useEffect(() => {
+    if (!ready || !html) return;
+    appBridge
+      .sendSandboxResourceReady({ html, csp, permissions })
+      .catch((err) => {
+        const error = err instanceof Error ? err : new Error(String(err));
+        setError(error);
+        onErrorRef.current?.(error);
+      });
+  }, [ready, html, appBridge, csp, permissions]);
+
+  // Send tool input when available
+  useEffect(() => {
+    if (!ready || !initialized || !toolInput) return;
+    appBridge.sendToolInput({ arguments: toolInput });
+  }, [ready, initialized, toolInput, appBridge]);
+
+  // Send tool result when available
+  useEffect(() => {
+    if (!ready || !initialized || !toolResult) return;
+    appBridge.sendToolResult(toolResult);
+  }, [ready, initialized, toolResult, appBridge]);
+
+  return (
+    <div
+      ref={containerRef}
+      style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column" }}
+    >
+      {error && (
+        <div style={{ color: "red", padding: "1rem" }}>Error: {error.message}</div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Renders an MCP App using AppBridge + SandboxIframe directly
  * so we can handle ui/request-display-mode requests with the proper protocol response.
  */
 
@@ -798,18 +970,16 @@ const McpAppView = function McpAppView({
   }, []);
 
   // Build sandbox URL with CSP query param for HTTP header-based CSP enforcement
-  const sandboxConfig = useMemo(() => {
+  const sandboxUrl = useMemo(() => {
     if (!appResource) return null;
-    const sandboxUrl = new URL(
-      `${getMcpSandboxBaseUrl()}/mcp-sandbox-proxy.html`,
+    const url = new URL(
+      `${getMcpSandboxBaseUrl()}/_sandbox/mcp-sandbox-proxy.html`,
+      window.location.origin,
     );
     if (appResource.csp) {
-      sandboxUrl.searchParams.set("csp", JSON.stringify(appResource.csp));
+      url.searchParams.set("csp", JSON.stringify(appResource.csp));
     }
-    return {
-      url: sandboxUrl,
-      csp: appResource.csp,
-    };
+    return url;
   }, [appResource]);
 
   return (
@@ -832,10 +1002,12 @@ const McpAppView = function McpAppView({
           </div>
         </div>
       )}
-      {!loadError && appResource && bridge && sandboxConfig && (
-        <AppFrame
+      {!loadError && appResource && bridge && sandboxUrl && (
+        <SandboxIframe
           html={appResource.html}
-          sandbox={sandboxConfig}
+          sandboxUrl={sandboxUrl}
+          csp={appResource.csp}
+          permissions={appResource.permissions}
           appBridge={bridge}
           toolInput={toolInput}
           toolResult={toolResult}

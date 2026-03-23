@@ -1,8 +1,16 @@
 import { randomUUID } from "node:crypto";
-import {
-  type ClientCapabilitiesWithExtensions,
-  UI_EXTENSION_CAPABILITIES,
-} from "@mcp-ui/client";
+import type { ClientCapabilities } from "@modelcontextprotocol/sdk/types.js";
+
+/** Extended ClientCapabilities with UI extension support (replaces @mcp-ui/client re-export). */
+type ClientCapabilitiesWithExtensions = ClientCapabilities & {
+  extensions?: Record<string, unknown>;
+};
+
+const UI_EXTENSION_CAPABILITIES = {
+  "io.modelcontextprotocol/ui": {
+    mimeTypes: ["text/html;profile=mcp-app"] as const,
+  },
+} as const;
 import {
   type McpUiResourceCsp,
   type McpUiResourcePermissions,
@@ -1239,8 +1247,17 @@ export async function fetchToolUiResource({
     type ContentUiMeta = {
       csp?: McpUiResourceCsp;
       permissions?: McpUiResourcePermissions;
+      domain?: string;
     };
     const uiMeta = (content as { _meta?: { ui?: ContentUiMeta } })._meta?.ui;
+
+    if (uiMeta?.domain) {
+      logger.warn(
+        { toolName, uri, domain: uiMeta.domain },
+        "MCP server requested stable origin via _meta.ui.domain but sandbox uses opaque origin. " +
+          "OAuth callbacks and origin-restricted APIs will not work for this app.",
+      );
+    }
 
     const result: ToolUiResourceData = {
       html,

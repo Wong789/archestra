@@ -1,7 +1,15 @@
-import {
-  type ClientCapabilitiesWithExtensions,
-  UI_EXTENSION_CAPABILITIES,
-} from "@mcp-ui/client";
+import type { ClientCapabilities } from "@modelcontextprotocol/sdk/types.js";
+
+/** Extended ClientCapabilities with UI extension support (replaces @mcp-ui/client re-export). */
+type ClientCapabilitiesWithExtensions = ClientCapabilities & {
+  extensions?: Record<string, unknown>;
+};
+
+const UI_EXTENSION_CAPABILITIES = {
+  "io.modelcontextprotocol/ui": {
+    mimeTypes: ["text/html;profile=mcp-app"] as const,
+  },
+} as const;
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import {
