@@ -281,7 +281,7 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.BulkUpsertDefaultCallPolicy,
         description:
-          "Bulk upsert default tool invocation policies (empty conditions) for multiple tools",
+          "Bulk upsert default tool invocation rules (unconditional template) for multiple tools",
         tags: ["Tool Invocation Policies"],
         body: z.object({
           toolIds: z.array(UuidIdSchema),
@@ -315,11 +315,12 @@ const autonomyPolicyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.BulkUpsertDefaultResultPolicy,
         description:
-          "Bulk upsert default trusted data policies (empty conditions) for multiple tools",
+          "Bulk upsert default tool output rules (unconditional template) for multiple tools",
         tags: ["Trusted Data Policies"],
         body: z.object({
           toolIds: z.array(UuidIdSchema),
           action: z.enum([
+            "assign_labels",
             "mark_as_trusted",
             "mark_as_untrusted",
             "block_always",

@@ -4,12 +4,11 @@ import {
   isAgentTool,
 } from "@shared";
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
-import { get } from "lodash-es";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema } from "@/database";
 import logger from "@/logging";
+import { evaluatePolicyTemplate } from "@/templating";
 import type {
-  AutonomyPolicyOperator,
   GlobalToolPolicy,
   ToolInvocation,
 } from "@/types";
@@ -22,6 +21,7 @@ type EvaluationResult = {
 export type PolicyEvaluationContext = {
   teamIds: string[];
   externalAgentId?: string;
+  labels?: string[];
 };
 
 const BLOCK_ALWAYS_REASON =
@@ -46,17 +46,34 @@ class ToolInvocationPolicyModel {
       if (existingDefault) {
         const [updatedPolicy] = await db
           .update(schema.toolInvocationPoliciesTable)
-          .set({ action: policy.action, reason: policy.reason ?? null })
+          .set({
+            action: policy.action,
+            reason: policy.reason ?? null,
+            matchTemplate:
+              policy.matchTemplate ??
+              ToolInvocationPolicyModel.buildTemplateFromConditions(
+                policy.conditions,
+              ),
+            sortOrder: policy.sortOrder ?? 0,
+          })
           .where(eq(schema.toolInvocationPoliciesTable.id, existingDefault.id))
           .returning();
 
-        return updatedPolicy;
+        return ToolInvocationPolicyModel.normalizePolicy(updatedPolicy);
       }
     }
 
     const [createdPolicy] = await db
       .insert(schema.toolInvocationPoliciesTable)
-      .values(policy)
+      .values({
+        ...policy,
+        matchTemplate:
+          policy.matchTemplate ??
+          ToolInvocationPolicyModel.buildTemplateFromConditions(
+            policy.conditions,
+          ),
+        sortOrder: policy.sortOrder ?? 0,
+      })
       .returning();
 
     // Clear auto-configured timestamp for this tool
@@ -68,14 +85,17 @@ class ToolInvocationPolicyModel {
       })
       .where(eq(schema.toolsTable.id, policy.toolId));
 
-    return createdPolicy;
+    return ToolInvocationPolicyModel.normalizePolicy(createdPolicy);
   }
 
   static async findAll(): Promise<ToolInvocation.ToolInvocationPolicy[]> {
-    return db
+    const rows = await db
       .select()
       .from(schema.toolInvocationPoliciesTable)
       .orderBy(desc(schema.toolInvocationPoliciesTable.createdAt));
+    return rows
+      .map((row) => ToolInvocationPolicyModel.normalizePolicy(row))
+      .sort(ToolInvocationPolicyModel.comparePolicies);
   }
 
   static async findById(
@@ -85,7 +105,7 @@ class ToolInvocationPolicyModel {
       .select()
       .from(schema.toolInvocationPoliciesTable)
       .where(eq(schema.toolInvocationPoliciesTable.id, id));
-    return policy || null;
+    return policy ? ToolInvocationPolicyModel.normalizePolicy(policy) : null;
   }
 
   static async update(
@@ -94,7 +114,18 @@ class ToolInvocationPolicyModel {
   ): Promise<ToolInvocation.ToolInvocationPolicy | null> {
     const [updatedPolicy] = await db
       .update(schema.toolInvocationPoliciesTable)
-      .set(policy)
+      .set({
+        ...policy,
+        ...(policy.conditions !== undefined
+          ? {
+              matchTemplate:
+                policy.matchTemplate ??
+                ToolInvocationPolicyModel.buildTemplateFromConditions(
+                  policy.conditions,
+                ),
+            }
+          : {}),
+      })
       .where(eq(schema.toolInvocationPoliciesTable.id, id))
       .returning();
 
@@ -109,7 +140,9 @@ class ToolInvocationPolicyModel {
         .where(eq(schema.toolsTable.id, updatedPolicy.toolId));
     }
 
-    return updatedPolicy || null;
+    return updatedPolicy
+      ? ToolInvocationPolicyModel.normalizePolicy(updatedPolicy)
+      : null;
   }
 
   static async delete(id: string): Promise<boolean> {
@@ -207,6 +240,8 @@ class ToolInvocationPolicyModel {
         toolIdsToCreate.map((toolId) => ({
           toolId,
           conditions: [],
+          matchTemplate: "{{true}}",
+          sortOrder: 0,
           action,
           reason: null,
         })),
@@ -271,136 +306,39 @@ class ToolInvocationPolicyModel {
       return false;
     }
 
-    // Separate into specific (has conditions) and default (empty conditions)
-    const specificPolicies = policies.filter((p) => p.conditions.length > 0);
-    const defaultPolicies = policies.filter((p) => p.conditions.length === 0);
+    const sortedPolicies = policies
+      .map((policy) => ToolInvocationPolicyModel.normalizePolicy(policy))
+      .sort(ToolInvocationPolicyModel.comparePolicies);
 
-    // Check specific policies first
-    for (const policy of specificPolicies) {
-      const conditionsMatch = policy.conditions.every((condition) => {
-        const { key, value, operator } = condition;
-        if (key.startsWith("context.")) {
-          return ToolInvocationPolicyModel.evaluateContextCondition(
-            key,
-            value,
-            operator,
-            context,
-          );
-        }
-        return ToolInvocationPolicyModel.evaluateInputCondition(
-          key,
-          value,
-          operator,
+    for (const policy of sortedPolicies) {
+      if (
+        !ToolInvocationPolicyModel.matchesPolicy({
+          policy,
+          toolName,
           toolInput,
-        );
-      });
-
-      if (conditionsMatch && policy.action === "require_approval") {
-        logger.info(
-          { toolName },
-          "checkApprovalRequired: specific policy requires approval",
-        );
-        return true;
+          context,
+        })
+      ) {
+        continue;
       }
 
-      // If a specific policy matched but is not require_approval, it takes precedence
-      if (conditionsMatch) {
-        logger.debug(
-          { toolName, action: policy.action },
-          "checkApprovalRequired: specific policy matched, no approval needed",
-        );
-        return false;
-      }
-    }
-
-    // Fall back to default policy
-    for (const policy of defaultPolicies) {
       if (policy.action === "require_approval") {
         logger.info(
           { toolName },
-          "checkApprovalRequired: default policy requires approval",
+          "checkApprovalRequired: matching policy requires approval",
         );
         return true;
       }
+
+      logger.debug(
+        { toolName, action: policy.action },
+        "checkApprovalRequired: matching policy does not require approval",
+      );
+      return false;
     }
 
     logger.debug({ toolName }, "checkApprovalRequired: no approval required");
     return false;
-  }
-
-  private static evaluateContextCondition(
-    key: string,
-    value: string,
-    operator: AutonomyPolicyOperator.SupportedOperator,
-    context: PolicyEvaluationContext,
-  ): boolean {
-    // Team matching - check if value is in teamIds array
-    if (key === CONTEXT_TEAM_IDS) {
-      switch (operator) {
-        case "contains":
-          return context.teamIds.includes(value);
-        case "notContains":
-          return !context.teamIds.includes(value);
-        default:
-          return false;
-      }
-    }
-
-    // Single value matching for other context fields
-    if (key === CONTEXT_EXTERNAL_AGENT_ID) {
-      const contextValue = context.externalAgentId;
-      switch (operator) {
-        case "equal":
-          return contextValue === value;
-        case "notEqual":
-          return contextValue !== value;
-        default:
-          return false;
-      }
-    }
-
-    return false;
-  }
-
-  private static evaluateInputCondition(
-    key: string,
-    value: string,
-    operator: AutonomyPolicyOperator.SupportedOperator,
-    // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
-    input: Record<string, any>,
-  ): boolean {
-    const argumentValue = get(input, key);
-    if (argumentValue === undefined) return false;
-
-    switch (operator) {
-      case "endsWith":
-        return (
-          typeof argumentValue === "string" && argumentValue.endsWith(value)
-        );
-      case "startsWith":
-        return (
-          typeof argumentValue === "string" && argumentValue.startsWith(value)
-        );
-      case "contains":
-        return (
-          typeof argumentValue === "string" && argumentValue.includes(value)
-        );
-      case "notContains":
-        return (
-          typeof argumentValue === "string" && !argumentValue.includes(value)
-        );
-      case "equal":
-        return argumentValue === value;
-      case "notEqual":
-        return argumentValue !== value;
-      case "regex":
-        return (
-          typeof argumentValue === "string" &&
-          new RegExp(value).test(argumentValue)
-        );
-      default:
-        return false;
-    }
   }
 
   /**
@@ -487,88 +425,27 @@ class ToolInvocationPolicyModel {
       const toolId = toolIdsByName.get(toolCallName);
       if (!toolId) continue;
 
-      const policies = policiesByToolId.get(toolId) || [];
+      const policies = (policiesByToolId.get(toolId) || [])
+        .map((policy) => ToolInvocationPolicyModel.normalizePolicy(policy))
+        .sort(ToolInvocationPolicyModel.comparePolicies);
 
-      // Separate policies into specific (has conditions) and default (empty conditions)
-      const specificPolicies = policies.filter((p) => p.conditions.length > 0);
-      const defaultPolicies = policies.filter((p) => p.conditions.length === 0);
+      if (policies.length > 0) {
+        let matchedPolicy = false;
 
-      // First, check specific policies (more specific rules take precedence)
-      let hasMatchingSpecificPolicy = false;
-      let specificAllowsUntrusted = false;
-
-      for (const policy of specificPolicies) {
-        // Check if all conditions match (AND logic)
-        const conditionsMatch = policy.conditions.every(
-          function evaluateCondition(condition) {
-            const { key, value, operator } = condition;
-            if (key.startsWith("context.")) {
-              return ToolInvocationPolicyModel.evaluateContextCondition(
-                key,
-                value,
-                operator,
-                context,
-              );
-            }
-            return ToolInvocationPolicyModel.evaluateInputCondition(
-              key,
-              value,
-              operator,
+        for (const policy of policies) {
+          if (
+            !ToolInvocationPolicyModel.matchesPolicy({
+              policy,
+              toolName: toolCallName,
               toolInput,
-            );
-          },
-        );
-
-        if (!conditionsMatch) continue;
-
-        hasMatchingSpecificPolicy = true;
-
-        if (policy.action === "block_always") {
-          return {
-            isAllowed: false,
-            reason: policy.reason || BLOCK_ALWAYS_REASON,
-            toolCallName,
-          };
-        }
-
-        if (policy.action === "block_when_context_is_untrusted") {
-          // Allow when context is trusted, block when untrusted
-          if (!isContextTrusted) {
-            return {
-              isAllowed: false,
-              reason: UNTRUSTED_CONTEXT_REASON,
-              toolCallName,
-            };
+              context,
+            })
+          ) {
+            continue;
           }
-          // Context is trusted, tool is allowed - continue to next tool
-          continue;
-        }
 
-        if (
-          policy.action === "allow_when_context_is_untrusted" ||
-          policy.action === "require_approval"
-        ) {
-          specificAllowsUntrusted = true;
-        }
-      }
+          matchedPolicy = true;
 
-      // If a specific policy matched, use its result (ignore default policies)
-      if (hasMatchingSpecificPolicy) {
-        if (!isContextTrusted && !specificAllowsUntrusted) {
-          return {
-            isAllowed: false,
-            reason: UNTRUSTED_CONTEXT_REASON,
-            toolCallName,
-          };
-        }
-        continue; // Tool is allowed, move to next tool
-      }
-
-      if (defaultPolicies.length > 0) {
-        // No specific policy matched - fall back to default policy (empty conditions)
-        let defaultAllowsUntrusted = false;
-
-        for (const policy of defaultPolicies) {
           if (policy.action === "block_always") {
             return {
               isAllowed: false,
@@ -578,7 +455,6 @@ class ToolInvocationPolicyModel {
           }
 
           if (policy.action === "block_when_context_is_untrusted") {
-            // Allow when context is trusted, block when untrusted
             if (!isContextTrusted) {
               return {
                 isAllowed: false,
@@ -586,29 +462,33 @@ class ToolInvocationPolicyModel {
                 toolCallName,
               };
             }
-            // Context is trusted, tool is allowed
-            continue;
+
+            break;
           }
 
-          if (
-            policy.action === "allow_when_context_is_untrusted" ||
-            policy.action === "require_approval"
-          ) {
-            defaultAllowsUntrusted = true;
+          if (!isContextTrusted) {
+            return {
+              isAllowed:
+                policy.action === "allow_when_context_is_untrusted" ||
+                policy.action === "require_approval",
+              reason:
+                policy.action === "allow_when_context_is_untrusted" ||
+                policy.action === "require_approval"
+                  ? ""
+                  : UNTRUSTED_CONTEXT_REASON,
+              toolCallName,
+            };
           }
+
+          break;
         }
-        // Check if tool is allowed when context is untrusted
-        if (!isContextTrusted && !defaultAllowsUntrusted) {
-          return {
-            isAllowed: false,
-            reason: UNTRUSTED_CONTEXT_REASON,
-            toolCallName,
-          };
+
+        if (matchedPolicy) {
+          continue;
         }
-        continue; // Tool is allowed by default policy, skip global policy check
       }
 
-      // No policies exist - block in untrusted context (restrictive mode only reaches here)
+      // No policies exist or no rule matched - block in untrusted context
       if (!isContextTrusted) {
         return {
           isAllowed: false,
@@ -623,8 +503,7 @@ class ToolInvocationPolicyModel {
 
   /**
    * Check if a tool has any policy that could lead to blocking during streaming.
-   * Only `allow_when_context_is_untrusted` with empty conditions ("Allow always")
-   * is safe to stream — any other policy action or custom conditions requires buffering.
+   * Only unconditional allow / approval rules are safe to stream.
    */
   static async hasBlockingPolicy(
     toolName: string,
@@ -650,6 +529,7 @@ class ToolInvocationPolicyModel {
           eq(schema.toolsTable.name, toolName),
           or(
             inArray(schema.toolInvocationPoliciesTable.action, blockingActions),
+            sql`${schema.toolInvocationPoliciesTable.matchTemplate} <> '{{true}}'`,
             sql`jsonb_typeof(${schema.toolInvocationPoliciesTable.conditions}) = 'array' AND jsonb_array_length(${schema.toolInvocationPoliciesTable.conditions}) > 0`,
           ),
         ),
@@ -657,6 +537,83 @@ class ToolInvocationPolicyModel {
       .limit(1);
 
     return result.length > 0;
+  }
+
+  private static normalizePolicy(
+    policy: ToolInvocation.ToolInvocationPolicy,
+  ): ToolInvocation.ToolInvocationPolicy {
+    return {
+      ...policy,
+      matchTemplate:
+        policy.matchTemplate === "{{true}}" && policy.conditions.length > 0
+          ? ToolInvocationPolicyModel.buildTemplateFromConditions(
+              policy.conditions,
+            )
+          : policy.matchTemplate,
+    };
+  }
+
+  private static comparePolicies(
+    a: ToolInvocation.ToolInvocationPolicy,
+    b: ToolInvocation.ToolInvocationPolicy,
+  ): number {
+    if (a.sortOrder !== b.sortOrder) {
+      return a.sortOrder - b.sortOrder;
+    }
+
+    if (a.conditions.length === 0 && b.conditions.length > 0) {
+      return 1;
+    }
+
+    if (a.conditions.length > 0 && b.conditions.length === 0) {
+      return -1;
+    }
+
+    return a.createdAt.getTime() - b.createdAt.getTime();
+  }
+
+  private static buildTemplateFromConditions(
+    conditions: ToolInvocation.ToolInvocationPolicy["conditions"],
+  ): string {
+    if (conditions.length === 0) {
+      return "{{true}}";
+    }
+
+    const expressions = conditions.map(({ key, operator, value }) => {
+      if (key === CONTEXT_EXTERNAL_AGENT_ID) {
+        return `(matchContext context "externalAgentId" "${operator}" ${JSON.stringify(value)})`;
+      }
+
+      if (key === CONTEXT_TEAM_IDS) {
+        return `(matchContext context "teamIds" "${operator}" ${JSON.stringify(value)})`;
+      }
+
+      return `(matchInput input "${key}" "${operator}" ${JSON.stringify(value)})`;
+    });
+
+    return expressions.length === 1
+      ? `{{${expressions[0].slice(1, -1)}}}`
+      : `{{all ${expressions.join(" ")}}}`;
+  }
+
+  private static matchesPolicy(params: {
+    policy: ToolInvocation.ToolInvocationPolicy;
+    toolName: string;
+    // biome-ignore lint/suspicious/noExplicitAny: tool inputs can be any shape
+    toolInput: Record<string, any>;
+    context: PolicyEvaluationContext;
+  }): boolean {
+    const { policy, toolInput, toolName, context } = params;
+    return evaluatePolicyTemplate(policy.matchTemplate, {
+      tool: { name: toolName },
+      input: toolInput,
+      context: {
+        externalAgentId: context.externalAgentId,
+        teamIds: context.teamIds,
+        labels: context.labels ?? [],
+      },
+      labels: context.labels ?? [],
+    });
   }
 }
 

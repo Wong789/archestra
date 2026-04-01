@@ -17,11 +17,15 @@ const CallPolicyConditionSchema = z.object({
 });
 
 const ConditionsSchema = z.array(CallPolicyConditionSchema);
+const MatchTemplateSchema = z.string().min(1);
+const SortOrderSchema = z.number().int().nonnegative();
 
 export const SelectToolInvocationPolicySchema = createSelectSchema(
   schema.toolInvocationPoliciesTable,
   {
     conditions: ConditionsSchema,
+    matchTemplate: MatchTemplateSchema,
+    sortOrder: SortOrderSchema,
     action: ToolInvocationPolicyActionSchema,
   },
 );
@@ -29,6 +33,8 @@ export const InsertToolInvocationPolicySchema = createInsertSchema(
   schema.toolInvocationPoliciesTable,
   {
     conditions: ConditionsSchema,
+    matchTemplate: MatchTemplateSchema.optional(),
+    sortOrder: SortOrderSchema.optional(),
     action: ToolInvocationPolicyActionSchema,
   },
 ).omit({

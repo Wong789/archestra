@@ -702,7 +702,7 @@ export const updateTrustedDataPolicy = <ThrowOnError extends boolean = false>(op
 });
 
 /**
- * Bulk upsert default tool invocation policies (empty conditions) for multiple tools
+ * Bulk upsert default tool invocation rules (unconditional template) for multiple tools
  *
  * Authentication:
  *
@@ -722,7 +722,7 @@ export const bulkUpsertDefaultCallPolicy = <ThrowOnError extends boolean = false
 });
 
 /**
- * Bulk upsert default trusted data policies (empty conditions) for multiple tools
+ * Bulk upsert default tool output rules (unconditional template) for multiple tools
  *
  * Authentication:
  *

@@ -98,6 +98,7 @@ export interface LLMProxyContext<TRequest> {
   baselineModel: string;
   actualModel: string;
   contextIsTrusted: boolean;
+  contextLabels: string[];
   enabledToolNames: Set<string>;
   globalToolPolicy: "permissive" | "restrictive";
   toonStats: ToolCompressionStats;
@@ -417,7 +418,7 @@ export async function handleLLMProxy<
     );
 
     const commonMessages = requestAdapter.getMessages();
-    const { toolResultUpdates, contextIsTrusted, dualLlmAnalyses } =
+    const { toolResultUpdates, contextIsTrusted, contextLabels, dualLlmAnalyses } =
       await utils.trustedData.evaluateIfContextIsTrusted(
         commonMessages,
         resolvedAgentId,
@@ -425,7 +426,7 @@ export async function handleLLMProxy<
         userId,
         resolvedAgent.considerContextUntrusted,
         globalToolPolicy,
-        { teamIds, externalAgentId },
+        { teamIds, externalAgentId, labels: [] },
         // Streaming callbacks for dual LLM progress
         requestAdapter.isStreaming()
           ? () => {
@@ -464,6 +465,7 @@ export async function handleLLMProxy<
         resolvedAgentId,
         toolResultUpdatesCount: Object.keys(toolResultUpdates).length,
         contextIsTrusted,
+        contextLabels,
       },
       "Messages filtered after trusted data evaluation",
     );
@@ -559,6 +561,7 @@ export async function handleLLMProxy<
       baselineModel,
       actualModel,
       contextIsTrusted,
+      contextLabels,
       enabledToolNames,
       globalToolPolicy,
       toonStats,
@@ -654,6 +657,7 @@ async function handleStreaming<
     baselineModel,
     actualModel,
     contextIsTrusted,
+    contextLabels,
     enabledToolNames,
     globalToolPolicy,
     toonStats,
@@ -857,6 +861,7 @@ async function handleStreaming<
         {
           teamIds: teamIds ?? [],
           externalAgentId,
+          labels: contextLabels,
         },
         contextIsTrusted,
         enabledToolNames,
@@ -1027,6 +1032,7 @@ async function handleNonStreaming<
     baselineModel,
     actualModel,
     contextIsTrusted,
+    contextLabels,
     enabledToolNames,
     globalToolPolicy,
     toonStats,
@@ -1122,6 +1128,7 @@ async function handleNonStreaming<
       {
         teamIds: teamIds ?? [],
         externalAgentId,
+        labels: contextLabels,
       },
       contextIsTrusted,
       enabledToolNames,

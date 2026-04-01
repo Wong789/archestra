@@ -10,13 +10,13 @@ description: Built-in agent that auto-configures security policies for tools
 Check ../docs_writer_prompt.md before changing this file.
 -->
 
-The Policy Configuration Subagent analyzes tool metadata and automatically determines appropriate [Dynamic Tools](/docs/platform-dynamic-tools) security policies. Instead of manually configuring call policies and result policies for each tool, this subagent uses LLM structured output to generate both settings in a single call.
+The Policy Configuration Subagent analyzes tool metadata and automatically determines appropriate [Dynamic Tools](/docs/platform-dynamic-tools) guardrails. Instead of manually configuring tool access rules and context label rules for each tool, this subagent uses LLM structured output to generate both settings in a single call.
 
 ## How It Works
 
-When triggered, the subagent sends each tool's name, description, MCP server name, and parameter schema to an LLM. The LLM returns a structured response with two policy decisions:
+When triggered, the subagent sends each tool's name, description, MCP server name, and parameter schema to an LLM. The LLM returns two decisions:
 
-**toolInvocationAction** (Call Policy) -- when should the tool be allowed to execute:
+**toolInvocationAction** (Tool Access Rule) -- when should the tool be allowed to execute:
 
 | Value                             | Meaning                                                                       |
 | --------------------------------- | ----------------------------------------------------------------------------- |
@@ -24,27 +24,28 @@ When triggered, the subagent sends each tool's name, description, MCP server nam
 | `block_when_context_is_untrusted` | Only invoke when context is trusted (tools that could leak data)              |
 | `block_always`                    | Never invoke automatically (writes data, executes code, sends externally)     |
 
-**trustedDataAction** (Result Policy) -- how should the tool's output be treated:
+**trustedDataAction** (Context Label Rule) -- how should the tool's output be handled:
 
 | Value                    | Meaning                                                                                                                            |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `mark_as_trusted`        | Results are trusted (internal systems, databases, dev tools)                                                                       |
-| `mark_as_untrusted`      | Results are untrusted but exact values are safe to use (filesystem, external APIs)                                                 |
+| `assign_labels`          | Apply one or more labels to the tool result, usually `safe` or `sensitive`                                                        |
+| `mark_as_trusted`        | Compatibility alias for assigning `safe`                                                                                           |
+| `mark_as_untrusted`      | Compatibility alias for assigning `sensitive`                                                                                      |
 | `sanitize_with_dual_llm` | Results are processed through the [Dual LLM](/docs/platform-dual-llm) pattern (web scraping, untrusted data needing summarization) |
 | `block_always`           | Results are blocked entirely                                                                                                       |
 
-The LLM also returns a reasoning field explaining why it chose those settings (this reasoning is stored on the tool record for auditability).
+The LLM also returns a reasoning field explaining why it chose those settings.
 
 ## Analysis Prompt
 
 The subagent evaluates tool metadata against examples like:
 
-- Internal dev tools (list-endpoints, get-config): allow invocation, trust results
-- Database queries: allow invocation, trust results
-- File reads (code/config): allow invocation, mark results untrusted
+- Internal dev tools (list-endpoints, get-config): allow invocation, label results `safe`
+- Database queries: allow invocation, label results `safe`
+- File reads (code/config): allow invocation, label results `sensitive`
 - Web search/scraping: allow invocation, sanitize results with Dual LLM
-- File writes: block invocation, trust results
-- Code execution: block invocation, mark results untrusted
+- File writes: block invocation
+- Code execution: block invocation, label results `sensitive`
 
 These examples guide the LLM toward consistent policy decisions across different tool types.
 
@@ -52,7 +53,7 @@ These examples guide the LLM toward consistent policy decisions across different
 
 ### Manual: "Configure with Subagent" Button
 
-On the Tools page, select one or more tools using the checkboxes, then click **Configure with Subagent** in the bulk actions bar. The subagent analyzes each selected tool and applies the recommended policies. Tools that already have custom policies (with conditions) are preserved -- only default policies are overwritten.
+On the Guardrails page, select one or more tools using the checkboxes, then click **Configure with Subagent** in the bulk actions bar. The subagent analyzes each selected tool and applies the recommended rules. Tools that already have custom rules are preserved; only the broad default rules are overwritten.
 
 ### Automatic: On Tool Assignment
 

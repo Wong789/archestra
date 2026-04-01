@@ -1,11 +1,6 @@
-import {
-  type archestraApiTypes,
-  CONTEXT_EXTERNAL_AGENT_ID,
-  CONTEXT_TEAM_IDS,
-} from "@shared";
-import { ArrowRightIcon, Plus } from "lucide-react";
-import { ButtonWithTooltip } from "@/components/button-with-tooltip";
+import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { DebouncedInput } from "@/components/debounced-input";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -15,266 +10,205 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { useUniqueExternalAgentIds } from "@/lib/interactions/interaction.query";
-import {
-  useCallPolicyMutation,
   useToolInvocationPolicies,
   useToolInvocationPolicyCreateMutation,
   useToolInvocationPolicyDeleteMutation,
   useToolInvocationPolicyUpdateMutation,
 } from "@/lib/policy.query";
 import {
-  type CallPolicyAction,
-  getCallPolicyActionFromPolicies,
+  CALL_POLICY_ACTION_OPTIONS,
+  DEFAULT_POLICY_TEMPLATE,
 } from "@/lib/policy.utils";
-import { useTeams } from "@/lib/teams/team.query";
-import { CallPolicyToggle } from "./call-policy-toggle";
-import { PolicyCard } from "./policy-card";
-import {
-  type PolicyCondition,
-  ToolCallPolicyCondition,
-} from "./tool-call-policy-condition";
+import { PolicyTemplateEditor } from "./policy-template-editor";
 
 type ToolForPolicies = {
   id: string;
-  parameters?: archestraApiTypes.GetToolsWithAssignmentsResponses["200"]["data"][number]["parameters"];
 };
 
 export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
   const { data: invocationPolicies } = useToolInvocationPolicies();
-  const toolInvocationPolicyCreateMutation =
-    useToolInvocationPolicyCreateMutation();
-  const toolInvocationPolicyDeleteMutation =
-    useToolInvocationPolicyDeleteMutation();
-  const toolInvocationPolicyUpdateMutation =
-    useToolInvocationPolicyUpdateMutation();
-  const callPolicyMutation = useCallPolicyMutation();
-  const { data: externalAgentIds = [] } = useUniqueExternalAgentIds();
-  const { data: teams } = useTeams();
+  const createMutation = useToolInvocationPolicyCreateMutation();
+  const deleteMutation = useToolInvocationPolicyDeleteMutation();
+  const updateMutation = useToolInvocationPolicyUpdateMutation();
 
-  const byProfileToolId = invocationPolicies?.byProfileToolId ?? {};
-  const allPolicies = byProfileToolId[tool.id] || [];
-  // Filter out default policies (empty conditions) - they're shown in the DEFAULT section
-  const policies = allPolicies.filter(
-    (policy: (typeof allPolicies)[number]) => policy.conditions.length > 0,
-  );
+  const policies = invocationPolicies?.byProfileToolId[tool.id] || [];
 
-  const argumentNames = Object.keys(tool.parameters?.properties || []);
-  // Combine argument names with context condition options
-  const contextOptions = [
-    ...(externalAgentIds.length > 0 ? [CONTEXT_EXTERNAL_AGENT_ID] : []),
-    ...((teams?.length ?? 0) > 0 ? [CONTEXT_TEAM_IDS] : []),
-  ];
-  const conditionKeyOptions = [...argumentNames, ...contextOptions];
-
-  // Derive call policy action from policies (default policy with empty conditions)
-  const currentAction = getCallPolicyActionFromPolicies(
-    tool.id,
-    invocationPolicies ?? { byProfileToolId: {} },
-  );
-
-  const getDefaultConditionKey = () =>
-    argumentNames[0] ??
-    (externalAgentIds.length > 0
-      ? CONTEXT_EXTERNAL_AGENT_ID
-      : CONTEXT_TEAM_IDS);
-
-  const handleConditionChange = (
-    policy: (typeof policies)[number],
-    index: number,
-    updatedCondition: PolicyCondition,
+  const reorderRules = async (
+    reordered: Array<{ id: string; sortOrder: number }>,
   ) => {
-    const newConditions = [...policy.conditions];
-    newConditions[index] = updatedCondition;
-    toolInvocationPolicyUpdateMutation.mutate({
-      id: policy.id,
-      conditions: newConditions,
-    });
-  };
-
-  const handleConditionRemove = (
-    policy: (typeof policies)[number],
-    index: number,
-  ) => {
-    const newConditions = policy.conditions.filter(
-      (_: unknown, i: number) => i !== index,
+    await Promise.all(
+      reordered.map((rule, index) =>
+        updateMutation.mutateAsync({
+          id: rule.id,
+          sortOrder: index,
+        }),
+      ),
     );
-    toolInvocationPolicyUpdateMutation.mutate({
-      id: policy.id,
-      conditions: newConditions,
-    });
-  };
-
-  const handleConditionAdd = (policy: (typeof policies)[number]) => {
-    const newConditions: PolicyCondition[] = [
-      ...policy.conditions,
-      { key: getDefaultConditionKey(), operator: "equal", value: "" },
-    ];
-    toolInvocationPolicyUpdateMutation.mutate({
-      id: policy.id,
-      conditions: newConditions,
-    });
-  };
-
-  const handleActionChange = (action: CallPolicyAction) => {
-    if (action === currentAction) return;
-    callPolicyMutation.mutate({
-      toolId: tool.id,
-      action,
-    });
   };
 
   return (
     <div className="border border-border rounded-lg p-6 bg-card space-y-4">
-      <div>
-        <h3 className="text-sm font-semibold mb-1">Tool Call Policies</h3>
+      <div className="space-y-1">
+        <h3 className="text-sm font-semibold">Tool Access Rules</h3>
         <p className="text-sm text-muted-foreground">
-          Controls when the tool can be called based on context trust level
+          Rules run from top to bottom. The first match wins.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Reasonable default: keep a final <code>{DEFAULT_POLICY_TEMPLATE}</code>{" "}
+          rule set to <strong>Allow in safe context</strong>.
         </p>
       </div>
-      <div className="flex items-center justify-between p-3 bg-muted rounded-md border border-border">
-        <div className="flex items-center gap-3">
-          <div className="text-xs font-medium text-muted-foreground">
-            DEFAULT
-          </div>
+
+      {policies.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground space-y-3">
+          <p>
+            No custom access rules yet. In restrictive mode, the tool is blocked
+            whenever the context is marked sensitive.
+          </p>
+          <Button
+            variant="outline"
+            onClick={() =>
+              createMutation.mutate({
+                toolId: tool.id,
+                sortOrder: 0,
+              })
+            }
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Add default rule
+          </Button>
         </div>
-        <CallPolicyToggle
-          value={currentAction}
-          onChange={handleActionChange}
-          size="lg"
-        />
-      </div>
-      {policies.map((policy: (typeof allPolicies)[number]) => (
-        <PolicyCard
+      ) : null}
+
+      {policies.map((policy, index) => (
+        <div
           key={policy.id}
-          onDelete={() => toolInvocationPolicyDeleteMutation.mutate(policy.id)}
+          className="rounded-lg border border-border bg-muted/20 p-4 space-y-4"
         >
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-2">
-              {policy.conditions.map(
-                (condition: PolicyCondition, index: number) => (
-                  <div
-                    key={`${condition.key}-${condition.operator}-${condition.value}`}
-                    className="flex items-center gap-2"
-                  >
-                    <span className="text-sm text-muted-foreground w-2">
-                      {index === 0 ? "If" : ""}
-                    </span>
-                    <ToolCallPolicyCondition
-                      condition={condition}
-                      conditionKeyOptions={{ argumentNames, contextOptions }}
-                      removable={policy.conditions.length > 1}
-                      onChange={(updated) =>
-                        handleConditionChange(policy, index, updated)
-                      }
-                      onRemove={() => handleConditionRemove(policy, index)}
-                    />
-                    {index < policy.conditions.length - 1 ? (
-                      <span className="text-sm text-muted-foreground">and</span>
-                    ) : (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              className="h-9 w-9 p-0"
-                              aria-label="Add condition"
-                              onClick={() => handleConditionAdd(policy)}
-                            >
-                              <Plus className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Add condition</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
-                  </div>
-                ),
-              )}
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary">Rule {index + 1}</Badge>
+              {policy.matchTemplate.trim() === DEFAULT_POLICY_TEMPLATE ? (
+                <Badge variant="outline">Default</Badge>
+              ) : null}
             </div>
-            <div className="flex items-center gap-2 pl-12">
-              <ArrowRightIcon className="w-4 h-4 text-muted-foreground shrink-0" />
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                disabled={index === 0}
+                onClick={() => {
+                  const next = [...policies];
+                  [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                  void reorderRules(next.map((rule) => ({ id: rule.id, sortOrder: rule.sortOrder })));
+                }}
+              >
+                <ArrowUp className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                disabled={index === policies.length - 1}
+                onClick={() => {
+                  const next = [...policies];
+                  [next[index], next[index + 1]] = [next[index + 1], next[index]];
+                  void reorderRules(next.map((rule) => ({ id: rule.id, sortOrder: rule.sortOrder })));
+                }}
+              >
+                <ArrowDown className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => deleteMutation.mutate(policy.id)}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="text-xs font-medium text-muted-foreground">When</div>
+            <PolicyTemplateEditor
+              value={policy.matchTemplate}
+              placeholder='Examples: {{hasLabel labels "sensitive"}} or {{matchInput input "path" "startsWith" "/etc"}}'
+              onChange={(matchTemplate) =>
+                updateMutation.mutate({
+                  id: policy.id,
+                  matchTemplate,
+                })
+              }
+            />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-[240px_1fr]">
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-muted-foreground">
+                Then
+              </div>
               <Select
-                defaultValue={policy.action}
-                onValueChange={(
-                  value: archestraApiTypes.GetToolInvocationPoliciesResponses["200"][number]["action"],
-                ) =>
-                  toolInvocationPolicyUpdateMutation.mutate({
+                value={policy.action}
+                onValueChange={(action) =>
+                  updateMutation.mutate({
                     id: policy.id,
-                    action: value,
+                    action: action as (typeof policy.action),
                   })
                 }
               >
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Action" />
+                <SelectTrigger>
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {[
-                    {
-                      value: "allow_when_context_is_untrusted",
-                      label: "Allow always",
-                    },
-                    {
-                      value: "block_when_context_is_untrusted",
-                      label: "Allow in safe context",
-                    },
-                    {
-                      value: "require_approval",
-                      label: "Require approval",
-                    },
-                    { value: "block_always", label: "Block always" },
-                  ].map(({ value, label }) => (
-                    <SelectItem
-                      key={label}
-                      value={value}
-                      description={
-                        value === "require_approval"
-                          ? "Requires user confirmation before executing in chat. In autonomous agent sessions (A2A, API, MS Teams, subagents), the tool call is blocked."
-                          : undefined
-                      }
-                    >
-                      {label}
+                  {CALL_POLICY_ACTION_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                {
+                  CALL_POLICY_ACTION_OPTIONS.find(
+                    (option) => option.value === policy.action,
+                  )?.description
+                }
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-muted-foreground">
+                Reason shown when blocked
+              </div>
               <DebouncedInput
-                placeholder="Reason"
-                className="flex-1 min-w-[150px] max-w-[300px]"
+                placeholder="Optional explanation for operators or end users"
                 initialValue={policy.reason || ""}
-                onChange={(value) =>
-                  toolInvocationPolicyUpdateMutation.mutate({
+                onChange={(reason) =>
+                  updateMutation.mutate({
                     id: policy.id,
-                    reason: value,
+                    reason,
                   })
                 }
               />
             </div>
           </div>
-        </PolicyCard>
+        </div>
       ))}
-      <ButtonWithTooltip
-        variant="outline"
-        className="w-full"
-        onClick={() =>
-          toolInvocationPolicyCreateMutation.mutate({
-            toolId: tool.id,
-            argumentName: getDefaultConditionKey(),
-          })
-        }
-        disabled={conditionKeyOptions.length === 0}
-        disabledText="No parameters or context conditions available"
-      >
-        <Plus className="w-3.5 h-3.5 mr-1" /> Add Policy
-      </ButtonWithTooltip>
+
+      {policies.length > 0 ? (
+        <Button
+          variant="outline"
+          className="w-full"
+          onClick={() =>
+            createMutation.mutate({
+              toolId: tool.id,
+              sortOrder: policies.length,
+            })
+          }
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Add rule
+        </Button>
+      ) : null}
     </div>
   );
 }

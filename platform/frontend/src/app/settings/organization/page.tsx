@@ -88,6 +88,9 @@ export default function OrganizationSettingsPage() {
     boolean | null
   >(null);
   const [showTwoFactor, setShowTwoFactor] = useState<boolean | null>(null);
+  const [toolContextLabels, setToolContextLabels] = useState<string[] | null>(
+    null,
+  );
 
   // Derived values (use local state if changed, otherwise org data)
   const effectiveAppName = appName ?? organization?.appName ?? "";
@@ -103,6 +106,8 @@ export default function OrganizationSettingsPage() {
     animateChatPlaceholders ?? organization?.animateChatPlaceholders ?? true;
   const effectiveShowTwoFactor =
     showTwoFactor ?? organization?.showTwoFactor ?? false;
+  const effectiveToolContextLabels =
+    toolContextLabels ?? organization?.toolContextLabels ?? ["safe", "sensitive"];
   const liveChatLinkValidationErrors = effectiveChatLinks.map((link) =>
     validateChatLink(link),
   );
@@ -127,7 +132,8 @@ export default function OrganizationSettingsPage() {
     chatErrorSupportMessage !== null ||
     chatPlaceholders !== null ||
     animateChatPlaceholders !== null ||
-    showTwoFactor !== null;
+    showTwoFactor !== null ||
+    toolContextLabels !== null;
 
   const handleSaveFields = async () => {
     const data: Record<string, unknown> = {};
@@ -149,6 +155,7 @@ export default function OrganizationSettingsPage() {
       data.animateChatPlaceholders = animateChatPlaceholders;
     }
     if (showTwoFactor !== null) data.showTwoFactor = showTwoFactor;
+    if (toolContextLabels !== null) data.toolContextLabels = toolContextLabels;
 
     const updatedOrganization = await updateMutation.mutateAsync(data);
     if (!updatedOrganization) {
@@ -165,6 +172,7 @@ export default function OrganizationSettingsPage() {
     setChatPlaceholders(null);
     setAnimateChatPlaceholders(null);
     setShowTwoFactor(null);
+    setToolContextLabels(null);
   };
 
   if (isLoadingAppearance) {
@@ -296,6 +304,33 @@ export default function OrganizationSettingsPage() {
               />
             </CardContent>
           </Card>
+
+          <Card>
+            <SettingsCardHeader
+              title="Tool Policy Labels"
+              description="Suggested labels shown in the tool policy editor. Keep safe and sensitive so the default safety model remains clear."
+            />
+            <CardContent className="space-y-2">
+              <Label htmlFor="toolContextLabels">Available Labels</Label>
+              <Input
+                id="toolContextLabels"
+                value={effectiveToolContextLabels.join(", ")}
+                onChange={(e) =>
+                  setToolContextLabels(
+                    e.target.value
+                      .split(",")
+                      .map((label) => label.trim())
+                      .filter(Boolean),
+                  )
+                }
+                placeholder="safe, sensitive, internal, customer-data"
+              />
+              <p className="text-xs text-muted-foreground">
+                Comma-separated. These labels appear as suggestions when admins
+                classify tool output.
+              </p>
+            </CardContent>
+          </Card>
         </SettingsSectionStack>
       </div>
 
@@ -354,6 +389,7 @@ export default function OrganizationSettingsPage() {
           setChatPlaceholders(null);
           setAnimateChatPlaceholders(null);
           setShowTwoFactor(null);
+          setToolContextLabels(null);
         }}
         disabledSave={hasLiveChatLinkValidationErrors}
       />

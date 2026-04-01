@@ -1,4 +1,5 @@
 import Handlebars from "handlebars";
+import { get } from "lodash-es";
 import logger from "@/logging";
 
 /**
@@ -138,6 +139,61 @@ Handlebars.registerHelper("pluck", (array, property) => {
 });
 
 /**
+ * Policy template helpers
+ */
+
+Handlebars.registerHelper("all", (...args) => {
+  const values = args.slice(0, -1);
+  return values.every(Boolean);
+});
+
+Handlebars.registerHelper("any", (...args) => {
+  const values = args.slice(0, -1);
+  return values.some(Boolean);
+});
+
+Handlebars.registerHelper("eq", (a, b) => comparePolicyValue(a, "equal", b));
+Handlebars.registerHelper("ne", (a, b) => comparePolicyValue(a, "notEqual", b));
+Handlebars.registerHelper("containsText", (a, b) =>
+  comparePolicyValue(a, "contains", b),
+);
+Handlebars.registerHelper("notContainsText", (a, b) =>
+  comparePolicyValue(a, "notContains", b),
+);
+Handlebars.registerHelper("startsWithText", (a, b) =>
+  comparePolicyValue(a, "startsWith", b),
+);
+Handlebars.registerHelper("endsWithText", (a, b) =>
+  comparePolicyValue(a, "endsWith", b),
+);
+Handlebars.registerHelper("matchesRegex", (a, b) =>
+  comparePolicyValue(a, "regex", b),
+);
+
+Handlebars.registerHelper("hasLabel", function (...args) {
+  const options = args.pop() as Handlebars.HelperOptions;
+  const [labelsOrLabel, maybeLabel] = args;
+  const labels = Array.isArray(labelsOrLabel)
+    ? labelsOrLabel
+    : get(options.data.root, "labels", []);
+  const label = Array.isArray(labelsOrLabel) ? maybeLabel : labelsOrLabel;
+
+  return Array.isArray(labels) && typeof label === "string"
+    ? labels.includes(label)
+    : false;
+});
+
+Handlebars.registerHelper("matchInput", (input, path, operator, value) =>
+  matchByPath(input, path, operator, value),
+);
+Handlebars.registerHelper("matchOutput", (output, path, operator, value) =>
+  matchByPath(output, path, operator, value),
+);
+Handlebars.registerHelper("matchContext", (context, key, operator, value) =>
+  matchContextValue(context, key, operator, value),
+);
+
+/**
  * System prompt template helpers
  */
 
@@ -264,4 +320,147 @@ export function extractGroupsWithTemplate(
     // Runtime error during template execution
     return [];
   }
+}
+
+/**
+ * Evaluate a Handlebars policy template.
+ * Returns false for invalid templates or runtime failures.
+ */
+export function evaluatePolicyTemplate(
+  templateString: string,
+  context: Record<string, unknown>,
+): boolean {
+  const trimmedTemplate = templateString.trim();
+  if (trimmedTemplate === "{{true}}" || trimmedTemplate === "true") {
+    return true;
+  }
+
+  try {
+    const template = Handlebars.compile(templateString, { noEscape: true });
+    const result = template(context).trim();
+    return result.length > 0 && result !== "false" && result !== "0";
+  } catch (error) {
+    logger.warn(
+      { err: error, templateString },
+      "Failed to evaluate policy template",
+    );
+    return false;
+  }
+}
+
+function comparePolicyValue(
+  actual: unknown,
+  operator: string,
+  expected: unknown,
+): boolean {
+  if (actual === undefined || actual === null) {
+    return false;
+  }
+
+  switch (operator) {
+    case "startsWith":
+      return (
+        typeof actual === "string" &&
+        typeof expected === "string" &&
+        actual.startsWith(expected)
+      );
+    case "endsWith":
+      return (
+        typeof actual === "string" &&
+        typeof expected === "string" &&
+        actual.endsWith(expected)
+      );
+    case "contains":
+      return (
+        typeof actual === "string" &&
+        typeof expected === "string" &&
+        actual.includes(expected)
+      );
+    case "notContains":
+      return (
+        typeof actual === "string" &&
+        typeof expected === "string" &&
+        !actual.includes(expected)
+      );
+    case "notEqual":
+      return actual !== expected;
+    case "regex":
+      return (
+        typeof actual === "string" &&
+        typeof expected === "string" &&
+        new RegExp(expected.replaceAll("\\\\", "\\")).test(actual)
+      );
+    case "equal":
+    default:
+      return actual === expected;
+  }
+}
+
+function matchByPath(
+  source: unknown,
+  path: unknown,
+  operator: unknown,
+  expected: unknown,
+): boolean {
+  if (typeof path !== "string" || typeof operator !== "string") {
+    return false;
+  }
+
+  const values = extractValuesFromPath(source, path);
+  if (values.length === 0) {
+    return false;
+  }
+
+  return values.every((value) => comparePolicyValue(value, operator, expected));
+}
+
+function matchContextValue(
+  context: unknown,
+  key: unknown,
+  operator: unknown,
+  expected: unknown,
+): boolean {
+  if (
+    typeof key !== "string" ||
+    typeof operator !== "string" ||
+    typeof expected !== "string" ||
+    !context ||
+    typeof context !== "object"
+  ) {
+    return false;
+  }
+
+  const actual = get(context, key);
+  if (Array.isArray(actual)) {
+    if (operator === "contains") {
+      return actual.includes(expected);
+    }
+    if (operator === "notContains") {
+      return !actual.includes(expected);
+    }
+    return false;
+  }
+
+  return comparePolicyValue(actual, operator, expected);
+}
+
+function extractValuesFromPath(source: unknown, path: string): unknown[] {
+  if (path.includes("[*]")) {
+    const [arrayPath, itemPath] = path.split("[*].");
+    const array = get(source, arrayPath);
+    if (!Array.isArray(array)) {
+      return [];
+    }
+
+    if (!itemPath) {
+      return array;
+    }
+
+    return array
+      .map((item) => get(item, itemPath))
+      .filter((value) => value !== undefined);
+  }
+
+  const value = get(source, path);
+  return value === undefined ? [] : [value];
 }

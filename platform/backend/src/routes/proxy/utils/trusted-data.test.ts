@@ -272,6 +272,51 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       createSpy.mockRestore();
     });
 
+    test("does not re-trust context when later output is marked safe", async () => {
+      await TrustedDataPolicyModel.create({
+        toolId,
+        conditions: [{ key: "source", operator: "equal", value: "trusted" }],
+        action: "mark_as_trusted",
+        description: "Safe trusted source",
+      });
+
+      const commonMessages: CommonMessage[] = [
+        { role: "user", content: "Review all tool results" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_sensitive",
+              name: "get_emails",
+              content: { source: "unknown", payload: "raw" },
+              isError: false,
+            },
+            {
+              id: "call_safe",
+              name: "get_emails",
+              content: { source: "trusted", payload: "clean" },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const result = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        organizationId,
+        undefined,
+        false,
+        "restrictive",
+        { teamIds: [] },
+      );
+
+      expect(result.contextIsTrusted).toBe(false);
+      expect(result.contextLabels).toContain("sensitive");
+      expect(result.contextLabels).toContain("safe");
+      expect(result.toolResultUpdates).toEqual({});
+    });
+
     test("passes the latest user message text to the dual LLM subagent", async () => {
       await TrustedDataPolicyModel.create({
         toolId,

@@ -14039,6 +14039,8 @@ export type GetToolInvocationPoliciesResponses = {
             operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
             value: string;
         }>;
+        matchTemplate: string;
+        sortOrder: number;
         action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         reason: string | null;
         createdAt: string;
@@ -14056,6 +14058,8 @@ export type CreateToolInvocationPolicyData = {
             operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
             value: string;
         }>;
+        matchTemplate?: string;
+        sortOrder?: number;
         action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         reason?: string | null;
     };
@@ -14135,6 +14139,8 @@ export type CreateToolInvocationPolicyResponses = {
             operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
             value: string;
         }>;
+        matchTemplate: string;
+        sortOrder: number;
         action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         reason: string | null;
         createdAt: string;
@@ -14303,6 +14309,8 @@ export type GetToolInvocationPolicyResponses = {
             operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
             value: string;
         }>;
+        matchTemplate: string;
+        sortOrder: number;
         action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         reason: string | null;
         createdAt: string;
@@ -14320,6 +14328,8 @@ export type UpdateToolInvocationPolicyData = {
             operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
             value: string;
         }>;
+        matchTemplate?: string;
+        sortOrder?: number;
         action?: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         reason?: string | null;
     };
@@ -14401,6 +14411,8 @@ export type UpdateToolInvocationPolicyResponses = {
             operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
             value: string;
         }>;
+        matchTemplate: string;
+        sortOrder: number;
         action: 'allow_when_context_is_untrusted' | 'block_when_context_is_untrusted' | 'block_always' | 'require_approval';
         reason: string | null;
         createdAt: string;
@@ -14489,7 +14501,10 @@ export type GetTrustedDataPoliciesResponses = {
             operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
             value: string;
         }>;
-        action: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
+        matchTemplate: string;
+        sortOrder: number;
+        action: 'assign_labels' | 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
+        labels: Array<string>;
         createdAt: string;
         updatedAt: string;
     }>;
@@ -14506,7 +14521,10 @@ export type CreateTrustedDataPolicyData = {
             operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
             value: string;
         }>;
-        action: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
+        matchTemplate?: string;
+        sortOrder?: number;
+        action: 'assign_labels' | 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
+        labels?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -14585,7 +14603,10 @@ export type CreateTrustedDataPolicyResponses = {
             operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
             value: string;
         }>;
-        action: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
+        matchTemplate: string;
+        sortOrder: number;
+        action: 'assign_labels' | 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
+        labels: Array<string>;
         createdAt: string;
         updatedAt: string;
     };
@@ -14753,7 +14774,10 @@ export type GetTrustedDataPolicyResponses = {
             operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
             value: string;
         }>;
-        action: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
+        matchTemplate: string;
+        sortOrder: number;
+        action: 'assign_labels' | 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
+        labels: Array<string>;
         createdAt: string;
         updatedAt: string;
     };
@@ -14770,7 +14794,10 @@ export type UpdateTrustedDataPolicyData = {
             operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
             value: string;
         }>;
-        action?: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
+        matchTemplate?: string;
+        sortOrder?: number;
+        action?: 'assign_labels' | 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
+        labels?: Array<string>;
     };
     path: {
         id: string;
@@ -14851,7 +14878,10 @@ export type UpdateTrustedDataPolicyResponses = {
             operator: 'equal' | 'notEqual' | 'contains' | 'notContains' | 'startsWith' | 'endsWith' | 'regex';
             value: string;
         }>;
-        action: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
+        matchTemplate: string;
+        sortOrder: number;
+        action: 'assign_labels' | 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
+        labels: Array<string>;
         createdAt: string;
         updatedAt: string;
     };
@@ -14943,7 +14973,7 @@ export type BulkUpsertDefaultCallPolicyResponse = BulkUpsertDefaultCallPolicyRes
 export type BulkUpsertDefaultResultPolicyData = {
     body: {
         toolIds: Array<string>;
-        action: 'mark_as_trusted' | 'mark_as_untrusted' | 'block_always' | 'sanitize_with_dual_llm';
+        action: 'assign_labels' | 'mark_as_trusted' | 'mark_as_untrusted' | 'block_always' | 'sanitize_with_dual_llm';
     };
     path?: never;
     query?: never;
@@ -33173,6 +33203,7 @@ export type GetOrganizationResponses = {
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
         showTwoFactor: boolean;
+        toolContextLabels: Array<string>;
     };
 };
 
@@ -33288,6 +33319,7 @@ export type UpdateAppearanceSettingsData = {
         chatPlaceholders?: Array<string> | null;
         animateChatPlaceholders?: boolean;
         showTwoFactor?: boolean;
+        toolContextLabels?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -33395,6 +33427,7 @@ export type UpdateAppearanceSettingsResponses = {
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
         showTwoFactor: boolean;
+        toolContextLabels: Array<string>;
     };
 };
 
@@ -33511,6 +33544,7 @@ export type UpdateSecuritySettingsResponses = {
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
         showTwoFactor: boolean;
+        toolContextLabels: Array<string>;
     };
 };
 
@@ -33628,6 +33662,7 @@ export type UpdateLlmSettingsResponses = {
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
         showTwoFactor: boolean;
+        toolContextLabels: Array<string>;
     };
 };
 
@@ -33746,6 +33781,7 @@ export type UpdateAgentSettingsResponses = {
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
         showTwoFactor: boolean;
+        toolContextLabels: Array<string>;
     };
 };
 
@@ -33864,6 +33900,7 @@ export type UpdateKnowledgeSettingsResponses = {
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
         showTwoFactor: boolean;
+        toolContextLabels: Array<string>;
     };
 };
 
@@ -33977,6 +34014,7 @@ export type DropEmbeddingConfigResponses = {
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
         showTwoFactor: boolean;
+        toolContextLabels: Array<string>;
     };
 };
 
@@ -34173,6 +34211,7 @@ export type CompleteOnboardingResponses = {
         iconLogo: string | null;
         chatErrorSupportMessage: string | null;
         showTwoFactor: boolean;
+        toolContextLabels: Array<string>;
     };
 };
 

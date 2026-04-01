@@ -204,6 +204,40 @@ describe("ToolInvocationPolicyModel", () => {
       expect(result.reason).toBe("");
     });
 
+    test("supports label-aware templates for sensitive context", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const agent = await makeAgent();
+      const tool = await makeTool({
+        agentId: agent.id,
+        name: "label-aware-tool",
+      });
+      await makeAgentTool(agent.id, tool.id);
+      await ToolInvocationPolicyModel.deleteByToolId(tool.id);
+
+      await ToolInvocationPolicyModel.create({
+        toolId: tool.id,
+        conditions: [],
+        matchTemplate: '{{hasLabel labels "sensitive"}}',
+        sortOrder: 0,
+        action: "allow_when_context_is_untrusted",
+        reason: "Safe even when sensitive data is present",
+      });
+
+      const result = await ToolInvocationPolicyModel.evaluateBatch(
+        agent.id,
+        [{ toolCallName: "label-aware-tool", toolInput: { arg: "value" } }],
+        { ...mockContext, labels: ["sensitive"] },
+        false,
+        "restrictive",
+      );
+
+      expect(result.isAllowed).toBe(true);
+      expect(result.reason).toBe("");
+    });
+
     test("blocks tool when no policies exist and globalToolPolicy is restrictive", async ({
       makeAgent,
       makeTool,

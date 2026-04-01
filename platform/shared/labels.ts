@@ -21,3 +21,11 @@ export const LABEL_RESERVED_CHARS: string[] = [
   LABELS_ENTRY_DELIMITER,
   ":",
 ];
+
+/**
+ * Default policy labels attached to tool output context.
+ * `sensitive` preserves the existing trust boundary semantics.
+ */
+export const DEFAULT_TOOL_CONTEXT_LABELS = ["safe", "sensitive"] as const;
+export const SENSITIVE_TOOL_CONTEXT_LABEL = "sensitive";
+export const SAFE_TOOL_CONTEXT_LABEL = "safe";

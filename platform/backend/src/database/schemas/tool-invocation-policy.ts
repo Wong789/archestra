@@ -1,4 +1,4 @@
-import { jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import type { AutonomyPolicyOperator, ToolInvocation } from "@/types";
 import toolsTable from "./tool";
 
@@ -28,6 +28,8 @@ const toolInvocationPoliciesTable = pgTable("tool_invocation_policies", {
     .$type<CallPolicyCondition[]>()
     .notNull()
     .default([]),
+  matchTemplate: text("match_template").notNull().default("{{true}}"),
+  sortOrder: integer("sort_order").notNull().default(0),
 
   action: text("action")
     .$type<ToolInvocation.ToolInvocationPolicyAction>()

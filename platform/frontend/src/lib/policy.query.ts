@@ -1,11 +1,14 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import {
+  SENSITIVE_TOOL_CONTEXT_LABEL,
+  archestraApiSdk,
+  type archestraApiTypes,
+} from "@shared";
 import {
   type QueryClient,
   useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { PolicyCondition } from "@/app/mcp/tool-policies/_parts/tool-call-policy-condition";
 
 const {
   bulkUpsertDefaultCallPolicy,
@@ -22,8 +25,10 @@ const {
 } = archestraApiSdk;
 
 import {
+  DEFAULT_POLICY_TEMPLATE,
   type CallPolicyAction,
   type ResultPolicyAction,
+  isDefaultPolicyTemplate,
   transformToolInvocationPolicies,
   transformToolResultPolicies,
 } from "./policy.utils";
@@ -65,16 +70,20 @@ export function useToolInvocationPolicyCreateMutation() {
   return useMutation({
     mutationFn: async ({
       toolId,
-      argumentName,
+      sortOrder,
+      matchTemplate = DEFAULT_POLICY_TEMPLATE,
     }: {
       toolId: string;
-      argumentName: string;
+      sortOrder: number;
+      matchTemplate?: string;
     }) =>
       await createToolInvocationPolicy({
         body: {
           toolId,
-          conditions: [{ key: argumentName, operator: "equal", value: "" }],
-          action: "allow_when_context_is_untrusted",
+          conditions: [],
+          matchTemplate,
+          sortOrder,
+          action: "block_when_context_is_untrusted",
           reason: null,
         },
       }),
@@ -91,17 +100,11 @@ export function useToolInvocationPolicyUpdateMutation() {
     mutationFn: async (
       updatedPolicy: {
         id: string;
-        conditions?: PolicyCondition[];
       } & NonNullable<archestraApiTypes.UpdateToolInvocationPolicyData["body"]>,
     ) => {
-      const { id, conditions, action, reason } = updatedPolicy;
-
+      const { id, ...body } = updatedPolicy;
       return await updateToolInvocationPolicy({
-        body: {
-          ...(action !== undefined && { action }),
-          ...(reason !== undefined && { reason }),
-          ...(conditions !== undefined && { conditions }),
-        },
+        body,
         path: { id },
       });
     },
@@ -130,16 +133,21 @@ export function useToolResultPoliciesCreateMutation() {
   return useMutation({
     mutationFn: async ({
       toolId,
-      attributePath,
+      sortOrder,
+      matchTemplate = DEFAULT_POLICY_TEMPLATE,
     }: {
       toolId: string;
-      attributePath: string;
+      sortOrder: number;
+      matchTemplate?: string;
     }) =>
       await createTrustedDataPolicy({
         body: {
           toolId,
-          conditions: [{ key: attributePath, operator: "equal", value: "" }],
-          action: "mark_as_trusted",
+          conditions: [],
+          matchTemplate,
+          sortOrder,
+          action: "assign_labels",
+          labels: [SENSITIVE_TOOL_CONTEXT_LABEL],
         },
       }),
     onSuccess: () => {
@@ -155,16 +163,12 @@ export function useToolResultPoliciesUpdateMutation() {
     mutationFn: async (
       updatedPolicy: {
         id: string;
-        conditions?: PolicyCondition[];
       } & NonNullable<archestraApiTypes.UpdateTrustedDataPolicyData["body"]>,
     ) => {
-      const { id, conditions, action } = updatedPolicy;
+      const { id, ...body } = updatedPolicy;
 
       return await updateTrustedDataPolicy({
-        body: {
-          ...(action !== undefined && { action }),
-          ...(conditions !== undefined && { conditions }),
-        },
+        body,
         path: { id },
       });
     },
@@ -187,7 +191,6 @@ export function useToolResultPoliciesDeleteMutation() {
   });
 }
 
-// Upsert a default call policy (tool invocation policy with empty conditions)
 export function useCallPolicyMutation() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -198,32 +201,28 @@ export function useCallPolicyMutation() {
       toolId: string;
       action: CallPolicyAction;
     }) => {
-      // Get current policies from cache
       const cachedPolicies = queryClient.getQueryData<
-        ReturnType<
-          typeof import("./policy.utils").transformToolInvocationPolicies
-        >
+        ReturnType<typeof transformToolInvocationPolicies>
       >(["tool-invocation-policies"]);
 
       const existingPolicies = cachedPolicies?.byProfileToolId[toolId] || [];
-
-      // Find default policy (empty conditions array)
-      const defaultPolicy = existingPolicies.find(
-        (p) => p.conditions.length === 0,
+      const defaultPolicy = existingPolicies.find((policy) =>
+        isDefaultPolicyTemplate(policy.matchTemplate),
       );
 
       if (defaultPolicy) {
-        // Update existing default policy
         return await updateToolInvocationPolicy({
           path: { id: defaultPolicy.id },
           body: { action },
         });
       }
-      // Create new default policy with empty conditions
+
       return await createToolInvocationPolicy({
         body: {
           toolId,
           conditions: [],
+          matchTemplate: DEFAULT_POLICY_TEMPLATE,
+          sortOrder: existingPolicies.length,
           action,
           reason: null,
         },
@@ -236,42 +235,45 @@ export function useCallPolicyMutation() {
   });
 }
 
-// Upsert a default result policy (trusted data policy with empty conditions)
 export function useResultPolicyMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
       toolId,
       action,
+      labels,
     }: {
       toolId: string;
       action: ResultPolicyAction;
+      labels?: string[];
     }) => {
-      // Get current policies from cache
       const cachedPolicies = queryClient.getQueryData<
-        ReturnType<typeof import("./policy.utils").transformToolResultPolicies>
+        ReturnType<typeof transformToolResultPolicies>
       >(["tool-result-policies"]);
 
       const existingPolicies = cachedPolicies?.byProfileToolId[toolId] || [];
-
-      // Find default policy (empty conditions array)
-      const defaultPolicy = existingPolicies.find(
-        (p) => p.conditions.length === 0,
+      const defaultPolicy = existingPolicies.find((policy) =>
+        isDefaultPolicyTemplate(policy.matchTemplate),
       );
 
+      const normalizedLabels =
+        action === "assign_labels" ? labels ?? [SENSITIVE_TOOL_CONTEXT_LABEL] : [];
+
       if (defaultPolicy) {
-        // Update existing default policy
         return await updateTrustedDataPolicy({
           path: { id: defaultPolicy.id },
-          body: { action },
+          body: { action, labels: normalizedLabels },
         });
       }
-      // Create new default policy with empty conditions
+
       return await createTrustedDataPolicy({
         body: {
           toolId,
           conditions: [],
+          matchTemplate: DEFAULT_POLICY_TEMPLATE,
+          sortOrder: existingPolicies.length,
           action,
+          labels: normalizedLabels,
         },
       });
     },
@@ -282,7 +284,6 @@ export function useResultPolicyMutation() {
   });
 }
 
-// Bulk update default call policies for multiple tools
 export function useBulkCallPolicyMutation() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -305,19 +306,12 @@ export function useBulkCallPolicyMutation() {
   });
 }
 
-// Bulk update default result policies for multiple tools
 export function useBulkResultPolicyMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      toolIds,
-      action,
-    }: {
-      toolIds: string[];
-      action: ResultPolicyAction;
-    }) => {
+    mutationFn: async ({ toolIds }: { toolIds: string[] }) => {
       const result = await bulkUpsertDefaultResultPolicy({
-        body: { toolIds, action },
+        body: { toolIds, action: "assign_labels" },
       });
       return result.data ?? { updated: 0, created: 0 };
     },
@@ -328,7 +322,6 @@ export function useBulkResultPolicyMutation() {
   });
 }
 
-// Prefetch functions
 export function prefetchOperators(queryClient: QueryClient) {
   return queryClient.prefetchQuery({
     queryKey: ["operators"],
@@ -341,20 +334,7 @@ export function prefetchToolInvocationPolicies(queryClient: QueryClient) {
     queryKey: ["tool-invocation-policies"],
     queryFn: async () => {
       const all = (await getToolInvocationPolicies()).data ?? [];
-      const byProfileToolId = all.reduce(
-        (acc, policy) => {
-          acc[policy.toolId] = [...(acc[policy.toolId] || []), policy];
-          return acc;
-        },
-        {} as Record<
-          string,
-          archestraApiTypes.GetToolInvocationPoliciesResponses["200"]
-        >,
-      );
-      return {
-        all,
-        byProfileToolId,
-      };
+      return transformToolInvocationPolicies(all);
     },
   });
 }
@@ -364,20 +344,7 @@ export function prefetchToolResultPolicies(queryClient: QueryClient) {
     queryKey: ["tool-result-policies"],
     queryFn: async () => {
       const all = (await getTrustedDataPolicies()).data ?? [];
-      const byProfileToolId = all.reduce(
-        (acc, policy) => {
-          acc[policy.toolId] = [...(acc[policy.toolId] || []), policy];
-          return acc;
-        },
-        {} as Record<
-          string,
-          archestraApiTypes.GetTrustedDataPoliciesResponse["200"][]
-        >,
-      );
-      return {
-        all,
-        byProfileToolId,
-      };
+      return transformToolResultPolicies(all);
     },
   });
 }

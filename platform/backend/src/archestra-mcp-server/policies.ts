@@ -69,6 +69,16 @@ const createToolInvocationPolicySchema = z
       .describe(
         "Array of conditions that must all match. Empty array means unconditional.",
       ),
+    matchTemplate: z
+      .string()
+      .optional()
+      .describe("Optional Handlebars match template. If omitted, conditions are converted automatically."),
+    sortOrder: z
+      .number()
+      .int()
+      .nonnegative()
+      .optional()
+      .describe("Rule evaluation order. Lower values run first."),
     action:
       ToolInvocation.InsertToolInvocationPolicySchema.shape.action.describe(
         "The action to take when the policy matches.",
@@ -94,6 +104,16 @@ const updateToolInvocationPolicySchema = z
       .describe(
         "Updated array of conditions that must all match. Empty array means unconditional.",
       ),
+    matchTemplate: z
+      .string()
+      .optional()
+      .describe("Updated Handlebars match template."),
+    sortOrder: z
+      .number()
+      .int()
+      .nonnegative()
+      .optional()
+      .describe("Updated rule evaluation order."),
     action: ToolInvocation.InsertToolInvocationPolicySchema.shape.action
       .optional()
       .describe("Updated action to take when the policy matches."),
@@ -117,9 +137,23 @@ const createTrustedDataPolicySchema = z
       .describe(
         "Array of conditions that must all match. Empty array means unconditional.",
       ),
+    matchTemplate: z
+      .string()
+      .optional()
+      .describe("Optional Handlebars match template. If omitted, conditions are converted automatically."),
+    sortOrder: z
+      .number()
+      .int()
+      .nonnegative()
+      .optional()
+      .describe("Rule evaluation order. Lower values run first."),
     action: TrustedData.InsertTrustedDataPolicySchema.shape.action.describe(
       "The action to take when the policy matches.",
     ),
+    labels: z
+      .array(z.string())
+      .optional()
+      .describe("Labels to attach when action is `assign_labels`."),
     description: z
       .string()
       .optional()
@@ -139,9 +173,23 @@ const updateTrustedDataPolicySchema = z
       .describe(
         "Updated array of conditions that must all match. Empty array means unconditional.",
       ),
+    matchTemplate: z
+      .string()
+      .optional()
+      .describe("Updated Handlebars match template."),
+    sortOrder: z
+      .number()
+      .int()
+      .nonnegative()
+      .optional()
+      .describe("Updated rule evaluation order."),
     action: TrustedData.InsertTrustedDataPolicySchema.shape.action
       .optional()
       .describe("Updated action to take when the policy matches."),
+    labels: z
+      .array(z.string())
+      .optional()
+      .describe("Updated labels to attach when action is `assign_labels`."),
     description: z
       .string()
       .nullable()
@@ -179,6 +227,8 @@ const ToolInvocationPolicyOutputItemSchema = z.object({
   conditions: z
     .array(ToolInvocationPolicyConditionOutputSchema)
     .describe("Conditions evaluated for the policy."),
+  matchTemplate: z.string().describe("Handlebars match template."),
+  sortOrder: z.number().describe("Rule evaluation order."),
   action:
     ToolInvocation.InsertToolInvocationPolicySchema.shape.action.describe(
       "The policy action.",
@@ -212,10 +262,13 @@ const TrustedDataPolicyOutputItemSchema = z.object({
   conditions: z
     .array(TrustedDataPolicyConditionOutputSchema)
     .describe("Conditions evaluated for the policy."),
+  matchTemplate: z.string().describe("Handlebars match template."),
+  sortOrder: z.number().describe("Rule evaluation order."),
   action:
     TrustedData.InsertTrustedDataPolicySchema.shape.action.describe(
       "The policy action.",
     ),
+  labels: z.array(z.string()).describe("Labels applied by the policy, if any."),
   description: z
     .string()
     .nullable()

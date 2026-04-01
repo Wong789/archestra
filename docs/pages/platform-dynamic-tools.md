@@ -14,11 +14,18 @@ Exception:
 - Screenshot
 -->
 
-![Platform Tools Management](/docs/automated_screenshots/platform_tools_management.png)
+![Guardrails Overview](/docs/assets/automated_screenshots/platform_dynamic_tools_guardrails_overview.png)
 
-Dynamic Tools feature af the Archestra Platform addresses the "lethal trifecta" by adapting agent capabilities based on trust levels, providing more flexibility than read-only or isolated systems.
+Dynamic Tools lets Archestra adapt tool access based on what has already entered the model context. The goal is simple: once a tool returns sensitive or unknown content, later tool calls can be restricted automatically.
 
-This feature automatically restricts agent capabilities when untrusted content enters the context:
+The UI now centers on two ordered rule sets:
+
+- **Tool Access Rules** decide whether a tool may run in the current context
+- **Context Label Rules** classify tool output with labels such as `safe`, `sensitive`, or organization-specific labels
+
+Archestra evaluates rules from top to bottom. The first matching rule wins.
+
+This creates a safer middle ground than fully open agents or permanently read-only agents:
 
 | 🚫 Unsafe Agent                  | 🟢 Safe Agent with **Dynamic Tools**                                               | 🟢 Safe Read-Only Agent          |
 | -------------------------------- | ---------------------------------------------------------------------------------- | -------------------------------- |
@@ -58,24 +65,62 @@ Tool discovery happens transparently:
 
 This dynamic discovery allows Archestra to monitor and control tool usage without pre-configuration.
 
-## Mark tools
+## Classify output
 
-Archestra uses **Trusted Data Policies** to identify which tool outputs should be considered safe. **By default, all data is untrusted** - only explicitly marked data becomes trusted.
+Archestra uses **Context Label Rules** to classify tool output before it is returned to the model.
 
-![Dynamic Tools Edit Popup](/docs/automated_screenshots/platform_dynamic_tools_edit_popup.png)
+![Tool Policy Labels](/docs/assets/automated_screenshots/platform_dynamic_tools_tool_policy_labels.png)
 
-When a tool returns data:
+Two labels are provided by default:
 
-1. Archestra evaluates the output against all trusted data policies
-2. If no policy matches, the data is marked as untrusted
-3. The chat context becomes "tainted" when untrusted data enters
-4. This taint status affects what tools can be invoked subsequently
+- `safe`
+- `sensitive`
 
-Security enforcement flow:
+You can add more suggested labels in **Settings → Organization**. These labels become reusable building blocks for access rules.
 
-1. When a tool is invoked, Archestra checks if the chat context is tainted
-2. If tainted and no explicit allow policy exists, the tool is blocked
-3. The agent receives a refusal message explaining the security violation
-4. This prevents data exfiltration and unauthorized actions after processing untrusted content
+The important default is unchanged:
 
-This creates a dynamic security boundary - agents maintain full capabilities with trusted data but are automatically restricted when handling potentially malicious content.
+- if no result rule matches, the output is treated as `sensitive`
+
+This means unknown tool output does not silently upgrade the context to trusted.
+
+## Decide what can run next
+
+After each tool result is labeled, Archestra evaluates **Tool Access Rules** for subsequent tool calls.
+
+Typical patterns:
+
+- allow read-only tools even when `sensitive` is present
+- block write or external communication tools when `sensitive` is present
+- require approval for tools that are acceptable in chat but not for autonomous runs
+
+Templates can inspect:
+
+- tool input
+- tool output
+- context metadata such as `externalAgentId` and `teamIds`
+- current context labels with helpers like `{{hasLabel labels "sensitive"}}`
+
+## Rule model
+
+Each rule has three parts:
+
+1. A Handlebars condition template
+2. An action
+3. An optional explanation shown to admins
+
+The first matching rule wins, so most teams use:
+
+1. Specific exceptions at the top
+2. A broad default at the bottom
+
+For result classification, the most common action is `assign_labels`. Legacy `mark_as_trusted` and `mark_as_untrusted` still work, but they are treated as compatibility aliases for labeling output `safe` or `sensitive`.
+
+## Trust model
+
+Archestra no longer flips the whole conversation to trusted because one rule says "mark trusted". Instead, context trust is derived from labels:
+
+- if any current context data is labeled `sensitive`, sensitive-context protections apply
+- if no sensitive labels remain, standard tool access continues
+
+This keeps the model straightforward: rules classify output, and access rules react to those labels.

@@ -2,6 +2,7 @@ import { OrganizationCustomFontSchema, OrganizationThemeSchema } from "@shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { ToolContextLabelsSchema } from "./autonomy-policies/trusted-data";
 
 const DATA_URI_PREFIX = "data:image/png;base64,";
 const MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB decoded
@@ -127,6 +128,7 @@ const extendedFields = {
   chatPlaceholders: z.array(z.string()).nullable(),
   animateChatPlaceholders: z.boolean(),
   showTwoFactor: z.boolean(),
+  toolContextLabels: ToolContextLabelsSchema,
 };
 
 export const SelectOrganizationSchema = createSelectSchema(
@@ -152,6 +154,7 @@ export const UpdateAppearanceSettingsSchema = z.object({
   chatPlaceholders: z.array(z.string().max(80)).max(20).nullable().optional(),
   animateChatPlaceholders: z.boolean().optional(),
   showTwoFactor: z.boolean().optional(),
+  toolContextLabels: ToolContextLabelsSchema.optional(),
 });
 
 export const UpdateSecuritySettingsSchema = z.object({

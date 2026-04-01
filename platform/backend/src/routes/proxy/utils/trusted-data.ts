@@ -1,3 +1,4 @@
+import { SENSITIVE_TOOL_CONTEXT_LABEL } from "@shared";
 import { DualLlmSubagent } from "@/agents/subagents/dual-llm";
 import logger from "@/logging";
 import { TrustedDataPolicyModel } from "@/models";
@@ -39,6 +40,7 @@ export async function evaluateIfContextIsTrusted(
 ): Promise<{
   toolResultUpdates: ToolResultUpdates;
   contextIsTrusted: boolean;
+  contextLabels: string[];
   usedDualLlm: boolean;
   dualLlmAnalyses: DualLlmAnalysis[];
 }> {
@@ -67,6 +69,7 @@ export async function evaluateIfContextIsTrusted(
     return {
       toolResultUpdates: {},
       contextIsTrusted: false,
+      contextLabels: [SENSITIVE_TOOL_CONTEXT_LABEL],
       usedDualLlm: false,
       dualLlmAnalyses: [],
     };
@@ -105,6 +108,7 @@ export async function evaluateIfContextIsTrusted(
     return {
       toolResultUpdates,
       contextIsTrusted: true,
+      contextLabels: [],
       usedDualLlm: false,
       dualLlmAnalyses: [],
     };
@@ -130,6 +134,8 @@ export async function evaluateIfContextIsTrusted(
     "[trustedData] evaluateIfContextIsTrusted: evaluation results received",
   );
 
+  const contextLabels = new Set<string>();
+
   // Process evaluation results
   for (let i = 0; i < allToolCalls.length; i++) {
     const { toolCallId, toolResult, toolName } = allToolCalls[i];
@@ -145,8 +151,11 @@ export async function evaluateIfContextIsTrusted(
       continue;
     }
 
-    const { isTrusted, isBlocked, shouldSanitizeWithDualLlm, reason } =
+    const { isTrusted, isBlocked, shouldSanitizeWithDualLlm, reason, labels } =
       evaluation;
+    for (const label of labels) {
+      contextLabels.add(label);
+    }
     let toolResultIsTrusted = isTrusted;
     logger.debug(
       {
@@ -222,7 +231,10 @@ export async function evaluateIfContextIsTrusted(
     {
       agentId,
       updateCount: Object.keys(toolResultUpdates).length,
-      contextIsTrusted: !hasUntrustedData,
+      contextIsTrusted:
+        !hasUntrustedData &&
+        !contextLabels.has(SENSITIVE_TOOL_CONTEXT_LABEL),
+      contextLabels: [...contextLabels],
       usedDualLlm,
       dualLlmAnalysisCount: dualLlmAnalyses.length,
     },
@@ -231,7 +243,9 @@ export async function evaluateIfContextIsTrusted(
 
   return {
     toolResultUpdates,
-    contextIsTrusted: !hasUntrustedData,
+    contextIsTrusted:
+      !hasUntrustedData && !contextLabels.has(SENSITIVE_TOOL_CONTEXT_LABEL),
+    contextLabels: [...contextLabels],
     usedDualLlm,
     dualLlmAnalyses,
   };

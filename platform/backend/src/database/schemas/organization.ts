@@ -1,4 +1,8 @@
-import type { OrganizationCustomFont, OrganizationTheme } from "@shared";
+import {
+  type OrganizationCustomFont,
+  type OrganizationTheme,
+  DEFAULT_TOOL_CONTEXT_LABELS,
+} from "@shared";
 import {
   boolean,
   integer,
@@ -132,6 +136,12 @@ const organizationsTable = pgTable("organization", {
 
   /** Organization-level 2FA visibility toggle */
   showTwoFactor: boolean("show_two_factor").notNull().default(false),
+
+  /** Suggested labels that can be applied to tool output context */
+  toolContextLabels: text("tool_context_labels")
+    .array()
+    .notNull()
+    .default([...DEFAULT_TOOL_CONTEXT_LABELS]),
 });
 
 export default organizationsTable;

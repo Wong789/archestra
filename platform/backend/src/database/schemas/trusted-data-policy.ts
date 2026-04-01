@@ -1,4 +1,4 @@
-import { jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import type { AutonomyPolicyOperator, TrustedData } from "@/types";
 import toolsTable from "./tool";
 
@@ -25,10 +25,13 @@ const trustedDataPoliciesTable = pgTable("trusted_data_policies", {
     .$type<ResultPolicyCondition[]>()
     .notNull()
     .default([]),
+  matchTemplate: text("match_template").notNull().default("{{true}}"),
+  sortOrder: integer("sort_order").notNull().default(0),
   action: text("action")
     .$type<TrustedData.TrustedDataPolicyAction>()
     .notNull()
     .default("mark_as_trusted"),
+  labels: text("labels").array().notNull().default([]),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" })
     .notNull()

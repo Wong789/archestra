@@ -54,7 +54,8 @@ import {
 import {
   type CallPolicyAction,
   getCallPolicyActionFromPolicies,
-  getResultPolicyActionFromPolicies,
+  getResultPolicySummaryFromPolicies,
+  normalizeResultPolicyAction,
   RESULT_POLICY_ACTION_OPTIONS,
   type ResultPolicyAction,
 } from "@/lib/policy.utils";
@@ -271,9 +272,9 @@ export function AssignedToolsTable({
               ? invocationPolicies?.byProfileToolId[tool.id] || []
               : resultPolicies?.byProfileToolId[tool.id] || [];
 
-          // Check if tool has custom policies (non-empty conditions array)
+          // Check if tool has custom policies (non-default template)
           const hasCustomPolicy = policies.some(
-            (policy) => policy.conditions.length > 0,
+            (policy) => policy.matchTemplate.trim() !== "{{true}}",
           );
 
           return !hasCustomPolicy;
@@ -294,7 +295,6 @@ export function AssignedToolsTable({
         } else {
           await bulkResultPolicyMutation.mutateAsync({
             toolIds,
-            action: value as ResultPolicyAction,
           });
         }
       } finally {
@@ -393,6 +393,8 @@ export function AssignedToolsTable({
           await resultPolicyMutation.mutateAsync({
             toolId,
             action: value as ResultPolicyAction,
+            labels:
+              value === "assign_labels" ? ["sensitive"] : undefined,
           });
         }
       } catch (error) {
@@ -649,10 +651,11 @@ export function AssignedToolsTable({
             "resultPolicyAction",
           );
 
-          const resultAction = getResultPolicyActionFromPolicies(
+          const resultSummary = getResultPolicySummaryFromPolicies(
             row.original.id,
             resultPolicies ?? { byProfileToolId: {} },
           );
+          const resultAction = normalizeResultPolicyAction(resultSummary.action);
 
           const actionLabel =
             RESULT_POLICY_ACTION_OPTIONS.find(
