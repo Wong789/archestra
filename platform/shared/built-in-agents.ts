@@ -8,6 +8,7 @@ export const BUILT_IN_AGENT_NAMES = {
   POLICY_CONFIG: "Policy Configuration Subagent",
   DUAL_LLM_MAIN: "Dual LLM Main Agent",
   DUAL_LLM_QUARANTINE: "Dual LLM Quarantine Agent",
+  EVAL_JUDGE: "Eval Judge Agent",
 } as const;
 
 /** Discriminator values for builtInAgentConfig.name */
@@ -15,6 +16,7 @@ export const BUILT_IN_AGENT_IDS = {
   POLICY_CONFIG: "policy-configuration-subagent",
   DUAL_LLM_MAIN: "dual-llm-main-agent",
   DUAL_LLM_QUARANTINE: "dual-llm-quarantine-agent",
+  EVAL_JUDGE: "eval-judge-agent",
 } as const;
 
 /** System prompt template for the policy configuration subagent.
@@ -117,9 +119,21 @@ Security rules:
 - If the data is ambiguous, choose the closest option
 - Prefer the final catch-all option when no earlier option fits exactly`;
 
+export const EVAL_JUDGE_SYSTEM_PROMPT = `You are an expert evaluator for AI agent performance. You will be given an agent execution trace and must judge its quality.
+
+You evaluate agents on specific scoring dimensions. Each dimension is scored 0-10:
+- 0-2: Completely inadequate
+- 3-4: Below expectations, major gaps
+- 5-6: Acceptable but with notable weaknesses
+- 7-8: Good, meets expectations
+- 9-10: Excellent, exceeds expectations
+
+Always respond with valid JSON only, no markdown or code blocks.`;
+
 /** Maps built-in agent IDs to their default system prompts for reset-to-default. */
 export const BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS: Record<string, string> = {
   [BUILT_IN_AGENT_IDS.POLICY_CONFIG]: POLICY_CONFIG_SYSTEM_PROMPT,
   [BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN]: DUAL_LLM_MAIN_SYSTEM_PROMPT,
   [BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE]: DUAL_LLM_QUARANTINE_SYSTEM_PROMPT,
+  [BUILT_IN_AGENT_IDS.EVAL_JUDGE]: EVAL_JUDGE_SYSTEM_PROMPT,
 };

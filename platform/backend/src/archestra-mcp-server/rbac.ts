@@ -119,6 +119,10 @@ export const TOOL_PERMISSIONS: Record<
   // Chat — available to all (operate within user's own chat session)
   todo_write: null,
   artifact_write: null,
+
+  // Eval
+  eval_audit: { resource: "agentEval", action: "read" },
+  eval_observe: { resource: "agentEval", action: "read" },
   swap_agent: { resource: "agent", action: "read" },
   swap_to_default_agent: null,
 };

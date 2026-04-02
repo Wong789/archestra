@@ -1,0 +1,1 @@
+ALTER TABLE "agent_evals" ADD COLUMN "criteria" jsonb;

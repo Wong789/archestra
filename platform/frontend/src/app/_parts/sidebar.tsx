@@ -99,13 +99,20 @@ const contentNavGroups: NavGroup[] = [
         icon: Bot,
         customIsActive: (pathname: string) =>
           pathname.startsWith("/agents") &&
-          !pathname.startsWith("/agents/triggers"),
+          !pathname.startsWith("/agents/triggers") &&
+          !pathname.startsWith("/agents/evals"),
         subItems: [
           {
             title: "Triggers",
             url: "/agents/triggers",
             customIsActive: (pathname: string) =>
               pathname.startsWith("/agents/triggers"),
+          },
+          {
+            title: "Evals",
+            url: "/agents/evals",
+            customIsActive: (pathname: string) =>
+              pathname.startsWith("/agents/evals"),
           },
         ],
       },

@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-03-27
+lastUpdated: 2026-04-01
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -38,6 +38,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 |----------|--------|
 | Agents | `read`, `create`, `update`, `delete`, `team-admin` |
 | Agent Triggers | `read`, `create`, `update`, `delete` |
+| Agent Evaluations | `read`, `create`, `update`, `delete` |
 | LLM Proxies | `read`, `create`, `update`, `delete`, `team-admin` |
 | LLM Provider API Keys | `read`, `create`, `update`, `delete` |
 | LLM Virtual Keys | `read`, `create`, `update`, `delete` |
@@ -74,6 +75,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Resource | Actions |
 |----------|--------|
 | Agents | `read`, `create`, `update`, `delete` |
+| Agent Evaluations | `read` |
 | LLM Proxies | `read`, `create`, `update`, `delete` |
 | LLM Provider API Keys | `read` |
 | LLM Virtual Keys | `read` |
@@ -111,6 +113,10 @@ The following table lists all available permissions that can be assigned to cust
 | `agent:delete` | Delete agents |
 | `agent:team-admin` | Manage team assignments for agents |
 | `agent:admin` | Full administrative control over all agents, bypassing team restrictions |
+| `agentEval:read` | View agent evaluations and results |
+| `agentEval:create` | Create evaluations and trigger eval runs |
+| `agentEval:update` | Modify evaluation suites and cases |
+| `agentEval:delete` | Delete evaluations |
 | `agentSettings:read` | View agent settings (default model, default agent, security engine, file uploads) |
 | `agentSettings:update` | Modify agent settings (default model, default agent, security engine, file uploads) |
 | `agentTrigger:read` | View agent trigger configurations (Slack, MS Teams, email) |

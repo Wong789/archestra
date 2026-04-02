@@ -1,0 +1,1 @@
+ALTER TABLE "agent_eval_run_results" ADD COLUMN "overall_score" numeric(5, 4);

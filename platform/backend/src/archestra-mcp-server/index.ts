@@ -12,6 +12,7 @@ import { toolEntries as agentToolEntries, tools as agentTools } from "./agents";
 import { archestraMcpBranding } from "./branding";
 import { toolEntries as chatToolEntries, tools as chatTools } from "./chat";
 import { delegationToolArgsSchema, handleDelegation } from "./delegation";
+import { toolEntries as evalToolEntries, tools as evalTools } from "./eval";
 import {
   type ArchestraRuntimeToolEntry,
   errorResult,
@@ -67,6 +68,7 @@ const toolEntries: Partial<
   ...toolAssignmentToolEntries,
   ...knowledgeManagementToolEntries,
   ...chatToolEntries,
+  ...evalToolEntries,
 };
 
 export function getArchestraMcpTools() {
@@ -81,6 +83,7 @@ export function getArchestraMcpTools() {
     ...toolAssignmentTools,
     ...knowledgeManagementTools,
     ...chatTools,
+    ...evalTools,
   ];
 
   if (archestraMcpBranding.toolPrefix === ARCHESTRA_TOOL_PREFIX) {

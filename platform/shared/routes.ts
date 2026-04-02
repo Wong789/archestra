@@ -390,6 +390,20 @@ export const RouteId = {
 
   // Invitation Routes
   CheckInvitation: "checkInvitation",
+
+  // Agent Eval Routes
+  GetAgentEvals: "getAgentEvals",
+  GetAgentEval: "getAgentEval",
+  CreateAgentEval: "createAgentEval",
+  UpdateAgentEval: "updateAgentEval",
+  DeleteAgentEval: "deleteAgentEval",
+  GetAgentEvalCases: "getAgentEvalCases",
+  CreateAgentEvalCase: "createAgentEvalCase",
+  UpdateAgentEvalCase: "updateAgentEvalCase",
+  DeleteAgentEvalCase: "deleteAgentEvalCase",
+  GetAgentEvalRuns: "getAgentEvalRuns",
+  GetAgentEvalRun: "getAgentEvalRun",
+  CreateAgentEvalRun: "createAgentEvalRun",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

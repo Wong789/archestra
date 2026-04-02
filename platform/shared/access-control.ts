@@ -27,6 +27,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin", "admin"],
   agentTrigger: ["read", "create", "update", "delete"],
+  agentEval: ["read", "create", "update", "delete"],
 
   // LLM
   llmProxy: ["read", "create", "update", "delete", "team-admin", "admin"],
@@ -78,6 +79,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin"],
   agentTrigger: ["read", "create", "update", "delete"],
+  agentEval: ["read", "create", "update", "delete"],
 
   // LLM
   llmProxy: ["read", "create", "update", "delete", "team-admin"],
@@ -129,6 +131,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete"],
   agentTrigger: [],
+  agentEval: ["read"],
 
   // LLM
   llmProxy: ["read", "create", "update", "delete"],
@@ -209,6 +212,10 @@ export const permissionDescriptions: Record<string, string> = {
   "agentTrigger:create": "Set up new agent triggers",
   "agentTrigger:update": "Modify agent trigger configurations",
   "agentTrigger:delete": "Remove agent triggers",
+  "agentEval:read": "View agent evaluations and results",
+  "agentEval:create": "Create evaluations and trigger eval runs",
+  "agentEval:update": "Modify evaluation suites and cases",
+  "agentEval:delete": "Delete evaluations",
 
   // MCP
   "mcpGateway:read": "View and list MCP gateways",
@@ -959,6 +966,20 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.McpGatewayGet]: {}, // Server discovery endpoint
   [RouteId.McpGatewayPost]: {}, // JSON-RPC endpoint for resources/read and tools/call
   [RouteId.McpProxyPost]: {}, // Frontend proxy to MCP Gateway with session auth
+
+  // Agent Eval Routes
+  [RouteId.GetAgentEvals]: { agentEval: ["read"] },
+  [RouteId.GetAgentEval]: { agentEval: ["read"] },
+  [RouteId.CreateAgentEval]: { agentEval: ["create"] },
+  [RouteId.UpdateAgentEval]: { agentEval: ["update"] },
+  [RouteId.DeleteAgentEval]: { agentEval: ["delete"] },
+  [RouteId.GetAgentEvalCases]: { agentEval: ["read"] },
+  [RouteId.CreateAgentEvalCase]: { agentEval: ["create"] },
+  [RouteId.UpdateAgentEvalCase]: { agentEval: ["update"] },
+  [RouteId.DeleteAgentEvalCase]: { agentEval: ["delete"] },
+  [RouteId.GetAgentEvalRuns]: { agentEval: ["read"] },
+  [RouteId.GetAgentEvalRun]: { agentEval: ["read"] },
+  [RouteId.CreateAgentEvalRun]: { agentEval: ["create"] },
 };
 
 /**
@@ -976,6 +997,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/agents/triggers/slack": { agentTrigger: ["read"] },
   "/agents/triggers/ms-teams": { agentTrigger: ["read"] },
   "/agents/triggers/email": { agentTrigger: ["read"] },
+  "/agents/evals": { agentEval: ["read"] },
 
   // LLM
   "/llm/proxies": { llmProxy: ["read"] },

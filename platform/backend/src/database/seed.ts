@@ -5,6 +5,7 @@ import {
   BUILT_IN_AGENT_NAMES,
   DUAL_LLM_MAIN_SYSTEM_PROMPT,
   DUAL_LLM_QUARANTINE_SYSTEM_PROMPT,
+  EVAL_JUDGE_SYSTEM_PROMPT,
   PLAYWRIGHT_MCP_CATALOG_ID,
   PLAYWRIGHT_MCP_SERVER_NAME,
   POLICY_CONFIG_SYSTEM_PROMPT,
@@ -456,6 +457,16 @@ async function seedBuiltInAgents(): Promise<void> {
       systemPrompt: DUAL_LLM_QUARANTINE_SYSTEM_PROMPT,
       builtInAgentConfig: {
         name: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
+      } as const,
+    },
+    {
+      builtInAgentId: BUILT_IN_AGENT_IDS.EVAL_JUDGE,
+      name: BUILT_IN_AGENT_NAMES.EVAL_JUDGE,
+      description:
+        "Evaluates AI agent execution traces and scores performance across multiple dimensions",
+      systemPrompt: EVAL_JUDGE_SYSTEM_PROMPT,
+      builtInAgentConfig: {
+        name: BUILT_IN_AGENT_IDS.EVAL_JUDGE,
       } as const,
     },
   ];

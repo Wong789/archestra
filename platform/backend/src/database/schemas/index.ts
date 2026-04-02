@@ -1,6 +1,10 @@
 export { default as accountsTable } from "./account";
 export { default as agentsTable } from "./agent";
 export { default as agentConnectorAssignmentsTable } from "./agent-connector-assignment";
+export { default as agentEvalsTable } from "./agent-eval";
+export { default as agentEvalCasesTable } from "./agent-eval-case";
+export { default as agentEvalRunsTable } from "./agent-eval-run";
+export { default as agentEvalRunResultsTable } from "./agent-eval-run-result";
 export { default as agentKnowledgeBasesTable } from "./agent-knowledge-base";
 export { default as agentLabelsTable } from "./agent-label";
 export { default as agentSuggestedPromptsTable } from "./agent-suggested-prompt";

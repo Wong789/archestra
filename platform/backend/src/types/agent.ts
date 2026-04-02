@@ -62,11 +62,16 @@ const DualLlmQuarantineAgentConfigSchema = z.object({
   name: z.literal(BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE),
 });
 
+const EvalJudgeAgentConfigSchema = z.object({
+  name: z.literal(BUILT_IN_AGENT_IDS.EVAL_JUDGE),
+});
+
 // Discriminated union — add future built-in agents here
 export const BuiltInAgentConfigSchema = z.discriminatedUnion("name", [
   PolicyConfigAgentConfigSchema,
   DualLlmMainAgentConfigSchema,
   DualLlmQuarantineAgentConfigSchema,
+  EvalJudgeAgentConfigSchema,
 ]);
 
 export type BuiltInAgentConfig = z.infer<typeof BuiltInAgentConfigSchema>;
