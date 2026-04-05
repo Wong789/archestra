@@ -1037,8 +1037,6 @@ describe("OutlookEmailProvider", () => {
       expect(attachments[0].isInline).toBe(false);
     });
   });
-
-  // stripHtml tests moved to @/utils/strip-html.test.ts
 });
 
 describe("shouldFetchAttachments", () => {

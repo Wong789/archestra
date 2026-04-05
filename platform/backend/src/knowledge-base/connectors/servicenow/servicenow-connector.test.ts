@@ -999,6 +999,4 @@ describe("ServiceNowConnector", () => {
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
   });
-
-  // stripHtmlTags tests moved to @/utils/strip-html.test.ts
 });
