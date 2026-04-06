@@ -1,4 +1,7 @@
-import { createGoogleGenAIClient } from "@/clients/gemini-client";
+import {
+  createGoogleGenAIClient,
+  isVertexAiEnabled,
+} from "@/clients/gemini-client";
 import type { EmbeddingApiResponse, EmbeddingInput } from "./types";
 
 export class GeminiEmbeddingError extends Error {
@@ -33,8 +36,7 @@ export async function callGeminiEmbedding(params: {
 
   const client = createGoogleGenAIClient(apiKey, "[GeminiEmbedding]", baseUrl);
 
-  // Normalise to "models/gemini-embedding-001" format
-  const modelId = model.startsWith("models/") ? model : `models/${model}`;
+  const modelId = getGeminiEmbeddingModelId(model);
 
   // Map EmbeddingInput[] to ContentListUnion (PartUnion[]).
   // Strings pass through as-is; image inputs become Part objects with inlineData.
@@ -91,4 +93,12 @@ export async function callGeminiEmbedding(params: {
       (err instanceof Error ? err.message : String(err));
     throw new GeminiEmbeddingError(status, message);
   }
+}
+
+function getGeminiEmbeddingModelId(model: string): string {
+  if (isVertexAiEnabled()) {
+    return model.replace(/^models\//, "");
+  }
+
+  return model.startsWith("models/") ? model : `models/${model}`;
 }

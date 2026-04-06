@@ -1,10 +1,15 @@
 "use client";
 
-import { type archestraApiTypes, getConnectorNamePlaceholder } from "@shared";
+import {
+  type archestraApiTypes,
+  DocsPage,
+  getConnectorNamePlaceholder,
+} from "@shared";
 import { ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { KnowledgeSourceVisibilitySelector } from "@/app/knowledge/_parts/knowledge-source-visibility-selector";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +28,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useUpdateConnector } from "@/lib/knowledge/connector.query";
 import { ConfluenceConfigFields } from "./confluence-config-fields";
 import { ConnectorTypeIcon } from "./connector-icons";
@@ -101,6 +107,7 @@ export function EditConnectorDialog({
 
   const connectorType = connector.connectorType;
   const { typeLabel, urlFields: urlConfig } = getEditUrlConfig(connectorType);
+  const connectorDocsUrl = getConnectorDocsUrl(connectorType);
 
   const needsEmail = connectorType === "jira" || connectorType === "confluence";
   const isCloud = form.watch("config.isCloud") as boolean | undefined;
@@ -145,7 +152,18 @@ export function EditConnectorDialog({
           Edit {typeLabel} Connector
         </span>
       }
-      description="Update the settings for this connector."
+      description={
+        <>
+          Update the settings for this connector.{" "}
+          <ExternalDocsLink
+            href={connectorDocsUrl}
+            className="underline"
+            showIcon={false}
+          >
+            Learn more
+          </ExternalDocsLink>
+        </>
+      }
       size="medium"
       onSubmit={form.handleSubmit(handleSubmit)}
       footer={
@@ -538,4 +556,8 @@ function getEditUrlConfig(type: ConnectorType): {
         },
       };
   }
+}
+
+function getConnectorDocsUrl(type: ConnectorType): string | null {
+  return getFrontendDocsUrl(DocsPage.PlatformKnowledgeConnectors, type);
 }

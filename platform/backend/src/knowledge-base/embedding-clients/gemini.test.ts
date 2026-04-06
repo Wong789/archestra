@@ -3,15 +3,74 @@ import { describe, expect, test } from "@/test";
 
 vi.mock("@/clients/gemini-client", () => ({
   createGoogleGenAIClient: vi.fn(),
+  isVertexAiEnabled: vi.fn(),
 }));
 
-import { createGoogleGenAIClient } from "@/clients/gemini-client";
+import {
+  createGoogleGenAIClient,
+  isVertexAiEnabled,
+} from "@/clients/gemini-client";
 import { callGeminiEmbedding, type GeminiEmbeddingError } from "./gemini";
 
 const mockCreateGoogleGenAIClient = vi.mocked(createGoogleGenAIClient);
+const mockIsVertexAiEnabled = vi.mocked(isVertexAiEnabled);
 
 describe("callGeminiEmbedding", () => {
+  test("uses Gemini API model IDs outside Vertex AI", async () => {
+    mockIsVertexAiEnabled.mockReturnValue(false);
+
+    const embedContent = vi.fn().mockResolvedValue({
+      embeddings: [{ values: [0.1, 0.2, 0.3] }],
+    });
+
+    mockCreateGoogleGenAIClient.mockReturnValue({
+      models: {
+        embedContent,
+      },
+    } as never);
+
+    await callGeminiEmbedding({
+      inputs: ["first"],
+      model: "gemini-embedding-001",
+      apiKey: "test-key",
+    });
+
+    expect(embedContent).toHaveBeenCalledWith({
+      model: "models/gemini-embedding-001",
+      contents: ["first"],
+      config: undefined,
+    });
+  });
+
+  test("uses Vertex-compatible model IDs in Vertex AI mode", async () => {
+    mockIsVertexAiEnabled.mockReturnValue(true);
+
+    const embedContent = vi.fn().mockResolvedValue({
+      embeddings: [{ values: [0.1, 0.2, 0.3] }],
+    });
+
+    mockCreateGoogleGenAIClient.mockReturnValue({
+      models: {
+        embedContent,
+      },
+    } as never);
+
+    await callGeminiEmbedding({
+      inputs: ["first"],
+      model: "models/gemini-embedding-2-preview",
+      apiKey: "test-key",
+    });
+
+    expect(embedContent).toHaveBeenCalledWith({
+      model: "gemini-embedding-2-preview",
+      contents: ["first"],
+      config: undefined,
+    });
+  });
+
   test("embeds all texts in a single SDK call", async () => {
+    mockIsVertexAiEnabled.mockReturnValue(false);
+
     const embedContent = vi.fn().mockResolvedValue({
       embeddings: [{ values: [0.1, 0.2, 0.3] }, { values: [0.4, 0.5, 0.6] }],
     });
@@ -48,6 +107,8 @@ describe("callGeminiEmbedding", () => {
   });
 
   test("throws when the SDK response does not include one embedding per input", async () => {
+    mockIsVertexAiEnabled.mockReturnValue(false);
+
     const embedContent = vi.fn().mockResolvedValue({
       embeddings: [{ values: [0.1, 0.2, 0.3] }],
     });
@@ -70,6 +131,8 @@ describe("callGeminiEmbedding", () => {
   });
 
   test("wraps SDK errors as GeminiEmbeddingError", async () => {
+    mockIsVertexAiEnabled.mockReturnValue(false);
+
     const embedContent = vi.fn().mockRejectedValue({
       status: 429,
       message: "Rate limited",

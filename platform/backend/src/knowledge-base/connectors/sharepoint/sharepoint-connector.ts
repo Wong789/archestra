@@ -90,13 +90,12 @@ export class SharePointConnector extends BaseConnector {
       }
 
       const client = this.getGraphClient(params.credentials, config);
-      const siteId = await this.resolveSiteId(client, config.siteUrl);
+      const siteResolution = await this.resolveSite(client, config.siteUrl);
 
-      if (!siteId) {
+      if (!siteResolution.siteId) {
         return {
           success: false,
-          error:
-            "Could not resolve SharePoint site. Verify the site URL and app permissions.",
+          error: buildResolveSiteErrorMessage(siteResolution.error),
         };
       }
 
@@ -136,13 +135,12 @@ export class SharePointConnector extends BaseConnector {
 
     // Single client instance — SDK handles token acquisition and refresh automatically.
     const client = this.getGraphClient(params.credentials, parsed);
-    const siteId = await this.resolveSiteId(client, parsed.siteUrl);
+    const siteResolution = await this.resolveSite(client, parsed.siteUrl);
 
-    if (!siteId) {
-      throw new Error(
-        "Could not resolve SharePoint site. Verify the site URL and app permissions.",
-      );
+    if (!siteResolution.siteId) {
+      throw new Error(buildResolveSiteErrorMessage(siteResolution.error));
     }
+    const siteId = siteResolution.siteId;
 
     // Track the highest lastModifiedDateTime seen across all phases (drives + pages)
     // so the checkpoint only advances monotonically and a later phase with older
@@ -211,10 +209,10 @@ export class SharePointConnector extends BaseConnector {
     return Client.initWithMiddleware({ authProvider });
   }
 
-  private async resolveSiteId(
+  private async resolveSite(
     client: Client,
     siteUrl: string,
-  ): Promise<string | null> {
+  ): Promise<{ siteId: string | null; error?: string }> {
     const url = new URL(siteUrl);
     const hostname = url.hostname;
     const sitePath = url.pathname.replace(/^\//, "").replace(/\/$/, "");
@@ -225,9 +223,17 @@ export class SharePointConnector extends BaseConnector {
 
     try {
       const site = (await client.api(apiPath).get()) as { id: string };
-      return site.id ?? null;
-    } catch {
-      return null;
+      return { siteId: site.id ?? null };
+    } catch (error) {
+      const message = formatSharePointGraphError({
+        error,
+        apiPath,
+      });
+      this.log.warn(
+        { siteUrl, apiPath, error: message },
+        "Failed to resolve SharePoint site",
+      );
+      return { siteId: null, error: message };
     }
   }
 
@@ -647,6 +653,123 @@ function parseSharePointConfig(
     ...config,
   });
   return result.success ? result.data : null;
+}
+
+function buildResolveSiteErrorMessage(error?: string): string {
+  if (!error) {
+    return "Could not resolve SharePoint site. Verify the site URL and app permissions.";
+  }
+
+  return `Could not resolve SharePoint site. ${error}`;
+}
+
+function formatSharePointGraphError(params: {
+  error: unknown;
+  apiPath: string;
+}): string {
+  const { error, apiPath } = params;
+  const parts = [`Graph path: ${apiPath}`];
+
+  const statusCode = getGraphStatusCode(error);
+  if (statusCode !== null) {
+    parts.push(`status: ${statusCode}`);
+  }
+
+  const graphCode = getGraphCode(error);
+  if (graphCode) {
+    parts.push(`code: ${graphCode}`);
+  }
+
+  const requestId = getGraphRequestId(error);
+  if (requestId) {
+    parts.push(`request-id: ${requestId}`);
+  }
+
+  const clientRequestId = getGraphClientRequestId(error);
+  if (clientRequestId) {
+    parts.push(`client-request-id: ${clientRequestId}`);
+  }
+
+  const message = extractGraphErrorMessage(error);
+  if (message) {
+    parts.push(`message: ${message}`);
+  }
+
+  return parts.join("; ");
+}
+
+function extractGraphErrorMessage(error: unknown): string {
+  const bodyMessage = getGraphBodyMessage(error);
+  if (bodyMessage) {
+    return bodyMessage;
+  }
+
+  return extractErrorMessage(error);
+}
+
+function getGraphStatusCode(error: unknown): number | null {
+  const value = (error as { statusCode?: unknown })?.statusCode;
+  return typeof value === "number" ? value : null;
+}
+
+function getGraphCode(error: unknown): string | null {
+  const value = (error as { code?: unknown })?.code;
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function getGraphRequestId(error: unknown): string | null {
+  const direct = (error as { requestId?: unknown })?.requestId;
+  if (typeof direct === "string" && direct.length > 0) {
+    return direct;
+  }
+
+  return getHeaderValue(error, "request-id");
+}
+
+function getGraphClientRequestId(error: unknown): string | null {
+  return getHeaderValue(error, "client-request-id");
+}
+
+function getHeaderValue(error: unknown, headerName: string): string | null {
+  const headers = (error as { headers?: unknown })?.headers;
+  if (!headers || typeof headers !== "object" || !("get" in headers)) {
+    return null;
+  }
+
+  const get = (headers as { get?: unknown }).get;
+  if (typeof get !== "function") {
+    return null;
+  }
+
+  const value = get.call(headers, headerName);
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function getGraphBodyMessage(error: unknown): string | null {
+  const body = (error as { body?: unknown })?.body;
+  if (typeof body !== "string" || body.length === 0) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(body) as {
+      message?: unknown;
+      error?: { message?: unknown; innerError?: { date?: unknown } };
+    };
+
+    if (typeof parsed.message === "string" && parsed.message.length > 0) {
+      return parsed.message;
+    }
+
+    const nested = parsed.error?.message;
+    if (typeof nested === "string" && nested.length > 0) {
+      return nested;
+    }
+  } catch {
+    return body;
+  }
+
+  return null;
 }
 
 function buildDriveItemsUrl(

@@ -13,6 +13,15 @@ Check ../docs_writer_prompt.md before changing this file.
 
 Connectors pull data from external tools into knowledge bases on a schedule. Sync is incremental by default, so only new or changed content is processed after the first run. A connector can also be assigned to multiple knowledge bases.
 
+This page focuses on connector-specific setup. Every connector also shares a few common fields in the UI:
+
+- **Name** -- a label for your team
+- **Description** -- optional context for other admins
+- **Visibility** -- whether the connector is org-wide or team-scoped
+- **Schedule** -- when sync runs automatically
+
+Most connector-specific filters live under **Advanced** in the create/edit dialogs.
+
 Connector visibility is part of the broader knowledge source access model. See [Overview - Visibility Modes](/docs/platform-knowledge-bases#visibility-modes) for how connector visibility determines which connector data each user can query.
 
 ## Jira
@@ -111,16 +120,24 @@ Ingests documents and site pages from SharePoint Online via the Microsoft Graph 
 
 | Field         | Description                                                                                         |
 | ------------- | --------------------------------------------------------------------------------------------------- |
-| Tenant ID     | Your Azure AD (Entra ID) tenant ID or domain (e.g., `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)         |
-| Site URL      | Your SharePoint site URL (e.g., `https://your-tenant.sharepoint.com/sites/your-site`)               |
-| Client ID     | Azure AD app registration Client ID                                                                 |
-| Client Secret | Azure AD app registration Client Secret                                                             |
+| Tenant ID     | Your Azure AD (Entra ID) tenant ID or domain (e.g., `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)       |
+| Site URL      | Your SharePoint site URL (e.g., `https://your-tenant.sharepoint.com/sites/your-site`)             |
+| Client ID     | Azure AD app registration Application (client) ID                                                  |
+| Client Secret | Azure AD app registration client secret value                                                      |
 | Drive IDs     | Comma-separated document library IDs to sync (optional -- leave blank to sync all site libraries)   |
 | Folder Path   | Restrict sync to a specific folder path within each drive (optional)                                |
 | Include Pages | Toggle to sync site pages and their web part content (default: on)                                  |
-| Batch Size    | Items per batch (default: 50)                                                                       |
 
-Authentication uses an Azure AD app registration with client credentials (OAuth2). The app registration requires the `Sites.Read.All` permission on Microsoft Graph. Incremental sync uses the `lastModifiedDateTime` field to fetch only items modified since the last run.
+Authentication uses an Azure AD app registration with client credentials (OAuth2). The app registration requires the `Sites.Read.All` application permission on Microsoft Graph, and admin consent must be granted.
+
+To configure the connector:
+
+- `Tenant ID` comes from **Microsoft Entra ID > App registrations > <your app> > Overview > Directory (tenant) ID**
+- `Client ID` comes from **Application (client) ID** on the same page
+- `Client Secret` is the secret **Value** from **Certificates & secrets**, not the secret ID
+- `Site URL` should be the exact SharePoint site web URL, not just the display name
+
+Incremental sync uses the `lastModifiedDateTime` field to fetch only items modified since the last run.
 
 ## Managing Connectors
 
@@ -129,8 +146,6 @@ Connectors can be managed from either the **Connectors** page or a knowledge bas
 - **Toggle enabled/disabled** -- suspends or resumes the cron schedule
 - **Trigger sync** -- runs an immediate sync outside the schedule
 - **View runs** -- see sync history with status, document counts, and errors
-
-The knowledge base and connector list pages show which Agents and MCP Gateways are assigned to each connector.
 
 ## Adding New Connector Types
 

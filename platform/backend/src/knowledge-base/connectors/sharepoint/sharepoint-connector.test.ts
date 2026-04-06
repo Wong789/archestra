@@ -119,7 +119,21 @@ describe("SharePointConnector", () => {
       const connector = new SharePointConnector();
       const { mockGet } = setupMockClient(connector);
 
-      mockGet.mockRejectedValueOnce(new Error("Not found"));
+      mockGet.mockRejectedValueOnce({
+        statusCode: 403,
+        code: "accessDenied",
+        requestId: "req-123",
+        headers: {
+          get: (name: string) =>
+            name === "client-request-id" ? "client-456" : null,
+        },
+        body: JSON.stringify({
+          error: {
+            message: "Graph returned 403 Forbidden",
+          },
+        }),
+        message: "Graph returned 403 Forbidden",
+      });
 
       const result = await connector.testConnection({
         config: {
@@ -130,6 +144,14 @@ describe("SharePointConnector", () => {
       });
 
       expect(result.success).toBe(false);
+      expect(result.error).toContain(
+        "Graph path: /sites/tenant.sharepoint.com:/sites/nonexistent",
+      );
+      expect(result.error).toContain("status: 403");
+      expect(result.error).toContain("code: accessDenied");
+      expect(result.error).toContain("request-id: req-123");
+      expect(result.error).toContain("client-request-id: client-456");
+      expect(result.error).toContain("message: Graph returned 403 Forbidden");
     });
 
     it("returns failure when Client ID is missing", async () => {
@@ -145,6 +167,45 @@ describe("SharePointConnector", () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("Client ID is required");
+    });
+
+    it("includes the underlying site resolution error during sync", async () => {
+      const connector = new SharePointConnector();
+      const { mockGet } = setupMockClient(connector);
+
+      mockGet.mockRejectedValueOnce({
+        statusCode: 403,
+        body: JSON.stringify({
+          error: {
+            message: "Forbidden: Sites.Read.All required",
+          },
+        }),
+        message: "Forbidden: Sites.Read.All required",
+      });
+
+      let thrown: unknown;
+      try {
+        for await (const _batch of connector.sync({
+          config: {
+            tenantId: "test-tenant-id",
+            siteUrl: "https://tenant.sharepoint.com/sites/test",
+          },
+          credentials,
+          checkpoint: null,
+        })) {
+          // no-op
+        }
+      } catch (error) {
+        thrown = error;
+      }
+
+      const message =
+        thrown instanceof Error ? thrown.message : String(thrown ?? "");
+      expect(message).toContain(
+        "Graph path: /sites/tenant.sharepoint.com:/sites/test",
+      );
+      expect(message).toContain("status: 403");
+      expect(message).toContain("message: Forbidden: Sites.Read.All required");
     });
   });
 

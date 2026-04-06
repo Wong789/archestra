@@ -398,6 +398,36 @@ class ConnectorSyncService {
     if (existing) {
       // Same content hash → skip (unchanged)
       if (existing.contentHash === contentHash) {
+        const existingChunkCount = await KbChunkModel.countByDocument(
+          existing.id,
+        );
+
+        if (existingChunkCount === 0) {
+          await this.chunkAndStore({
+            documentId: existing.id,
+            title: doc.title,
+            content: doc.content,
+            mediaContent: doc.mediaContent,
+            metadata: doc.metadata,
+            connectorType,
+            acl,
+            log,
+          });
+
+          await KbDocumentModel.update(existing.id, {
+            embeddingStatus: "pending",
+          });
+
+          log.warn(
+            {
+              documentId: doc.id,
+              existingDocId: existing.id,
+            },
+            "Document had no chunks despite unchanged content, repaired and re-queued",
+          );
+          return { ingested: true, documentId: existing.id };
+        }
+
         log.debug(
           {
             documentId: doc.id,

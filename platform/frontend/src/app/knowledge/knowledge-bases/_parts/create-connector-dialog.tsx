@@ -3,12 +3,14 @@
 import {
   type archestraApiTypes,
   CONNECTOR_TYPE_LABELS,
+  DocsPage,
   getConnectorNamePlaceholder,
 } from "@shared";
 import { ArrowLeft, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { KnowledgeSourceVisibilitySelector } from "@/app/knowledge/_parts/knowledge-source-visibility-selector";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -36,6 +38,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useCreateConnector } from "@/lib/knowledge/connector.query";
 import { ConfluenceConfigFields } from "./confluence-config-fields";
 import { ConnectorTypeIcon } from "./connector-icons";
@@ -206,6 +209,9 @@ export function CreateConnectorDialog({
   const isCloud = form.watch("config.isCloud") as boolean | undefined;
   const needsEmail = connectorType === "jira" || connectorType === "confluence";
   const emailRequired = needsEmail && isCloud !== false;
+  const connectorDocsUrl = selectedType
+    ? getConnectorDocsUrl(selectedType)
+    : null;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -285,7 +291,14 @@ export function CreateConnectorDialog({
                     CONNECTOR_OPTIONS.find((o) => o.type === selectedType)
                       ?.label
                   }{" "}
-                  instance.
+                  instance.{" "}
+                  <ExternalDocsLink
+                    href={connectorDocsUrl}
+                    className="underline"
+                    showIcon={false}
+                  >
+                    Learn more
+                  </ExternalDocsLink>
                 </DialogDescription>
               </DialogHeader>
 
@@ -694,4 +707,8 @@ function getUrlConfig(type: ConnectorType): {
         description: "Your SharePoint site URL.",
       };
   }
+}
+
+function getConnectorDocsUrl(type: ConnectorType): string | null {
+  return getFrontendDocsUrl(DocsPage.PlatformKnowledgeConnectors, type);
 }
