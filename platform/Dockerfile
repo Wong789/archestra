@@ -22,14 +22,15 @@ RUN apk add --no-cache git
 RUN git clone --depth 1 --branch "${KIND_VERSION}" https://github.com/kubernetes-sigs/kind.git /kind && \
     test "$(git -C /kind rev-parse HEAD)" = "${KIND_COMMIT}" && \
     cd /kind && \
+    go mod edit -go=1.25.8 && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /kind-binary .
 RUN git clone --depth 1 --branch "${DOCKER_CLI_VERSION}" https://github.com/docker/cli.git /docker-cli && \
     test "$(git -C /docker-cli rev-parse HEAD)" = "${DOCKER_CLI_COMMIT}" && \
     cd /docker-cli && \
     cp vendor.mod go.mod && cp vendor.sum go.sum && \
+    go mod edit -go=1.25.8 && \
     # CVE-2026-33186: grpc Improper Authorization fixed in >= 1.79.3
-    # CVE-2026-27141: golang.org/x/net vulnerability fixed in >= 0.51.0
-    go get google.golang.org/grpc@v1.79.3 golang.org/x/net@v0.51.0 && \
+    go get google.golang.org/grpc@v1.79.3 && \
     go mod vendor && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
     -ldflags "-X github.com/docker/cli/cli/version.Version=${DOCKER_CLI_VERSION#v}" \
@@ -169,8 +170,8 @@ RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker
 #     chmod +x /usr/local/bin/kind
 
 RUN apk add --no-cache supervisor && \
-    # CVE-2026-24049: wheel path traversal — not needed at runtime, remove entirely
-    pip uninstall -y wheel 2>/dev/null; rm -rf /usr/lib/python*/ensurepip
+    # CVE-2026-24049: wheel path traversal fixed in >= 0.46.2
+    pip install --upgrade --break-system-packages wheel>=0.46.2
 
 # Create postgres directories (user already exists from postgresql package)
 RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \

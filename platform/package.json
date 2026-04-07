@@ -65,7 +65,10 @@
       "minimatch": ">=10.2.3",
       "rollup": ">=4.59.0",
       "serialize-javascript": ">=7.0.3",
-      "undici": "7.24.5"
+      "undici": "7.24.5",
+      "@xmldom/xmldom": ">=0.8.12",
+      "path-to-regexp": ">=8.4.0",
+      "picomatch@>=4": ">=4.0.4"
     },
     "patchedDependencies": {
       "ai@6.0.90": "patches/ai@6.0.90.patch"
