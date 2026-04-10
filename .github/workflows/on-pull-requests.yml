@@ -5,25 +5,17 @@ on:
     types:
       - opened
       - synchronize
-  # You can use the merge_group event to trigger your GitHub Actions workflow when
-  # a pull request is added to a merge queue
-  # https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue#triggering-merge-group-checks-with-github-actions
-  merge_group:
 
 permissions: {}
 
 concurrency:
-  # Cancel any running workflow for the same branch when new commits are pushed.
-  # We group both by ref_name (available when CI is triggered by a push to a branch/tag)
-  # and head_ref (available when CI is triggered by a PR).
-  # For merge queue, we use merge_group to ensure each merge queue run gets its own group.
-  group: "on-pull-requests-${{ github.ref_name }}-${{ github.head_ref }}-${{ github.event.merge_group.head_sha || '' }}"
+  group: "on-pull-requests-${{ github.event.pull_request.number }}"
   cancel-in-progress: true
 
 jobs:
   release-freeze-check:
     name: Release Freeze Check
-    # Always run so it can be a required status check - passes immediately for non-release-please PRs and merge_group
+    # Always run so it can be a required status check - passes immediately for non-release-please PRs.
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read # Required to inspect the repository context for release-please PRs.
@@ -32,14 +24,6 @@ jobs:
       - name: Check if this requires freeze validation
         id: check-context
         run: |
-          # For merge_group events, always pass
-          if [ "$EVENT_NAME" = "merge_group" ]; then
-            echo "should_check=false" >> "$GITHUB_OUTPUT"
-            echo "✅ Merge queue - passing automatically"
-            exit 0
-          fi
-
-          # For PRs, only check release-please branches
           if [[ "$HEAD_REF" == release-please--* ]]; then
             echo "should_check=true" >> "$GITHUB_OUTPUT"
             echo "🔖 This is a release-please PR - checking freeze status"
@@ -48,7 +32,6 @@ jobs:
             echo "✅ Not a release-please PR - passing automatically"
           fi
         env:
-          EVENT_NAME: ${{ github.event_name }}
           HEAD_REF: ${{ github.head_ref }}
 
       - name: Check if release is frozen
@@ -168,7 +151,7 @@ jobs:
           comment-summary-in-pr: on-failure
 
   # Fast feedback on every PR push: lint + typecheck + unit tests.
-  # Full E2E suite runs only in merge queue (or on-demand via "run-e2e" PR label).
+  # Full E2E suite runs only on-demand via the "run-e2e" PR label.
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
     if: github.event_name == 'pull_request'
@@ -192,26 +175,3 @@ jobs:
 
       - name: Type checking, linting, formatting, unit tests
         run: pnpm check:ci
-
-  # Required checks: auto-passes on PRs so they aren't blocked, actually runs on merge queue.
-  platform-linting-and-tests-merge-queue:
-    name: Platform Linting and Tests (Required)
-    permissions:
-      contents: write # Required for release-please codegen commits and checked-in report artifacts.
-      security-events: write # Required for Docker Scout SARIF uploads.
-      id-token: write # Required for Workload Identity Federation.
-      pull-requests: write # Required for Docker Scout to write a comment to a PR.
-    uses: ./.github/workflows/platform-linting-and-tests.yml
-    with:
-      # On pull requests those Required Checks must still run because they are required in GH settings
-      # They should always succeed quickly in pull requests
-      # while on merge queues they should run normally and fail if needed
-      should-skip-running-and-always-succeed: ${{ github.event_name == 'pull_request' }}
-      is-fork-pr: ${{ github.event.pull_request.head.repo.fork == true }}
-    secrets:
-      TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-      TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

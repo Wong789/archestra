@@ -1,4 +1,4 @@
-name: Platform Linting and Tests (On Demand)
+name: Platform E2E Tests (On Demand)
 
 on:
   pull_request:
@@ -8,12 +8,12 @@ on:
 permissions: {}
 
 concurrency:
-  group: "platform-linting-and-tests-on-demand-${{ github.event.pull_request.number }}"
+  group: "platform-e2e-tests-on-demand-${{ github.event.pull_request.number }}"
   cancel-in-progress: true
 
 jobs:
-  platform-linting-and-tests-on-demand:
-    name: Platform Linting and Tests (On Demand)
+  platform-e2e-tests-on-demand:
+    name: Platform E2E Tests (On Demand)
     if: github.event.label.name == 'run-e2e'
     permissions:
       contents: write # Required for release-please codegen commits and checked-in report artifacts.
