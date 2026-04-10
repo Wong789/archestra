@@ -150,7 +150,8 @@ jobs:
           comment-summary-in-pr: on-failure
 
   # Fast feedback on every PR push: lint + typecheck + unit tests.
-  # Full E2E suite runs only on-demand via the "run-e2e" PR label.
+  # Full E2E runs in the separate "Platform E2E Tests" workflow on merge queue
+  # or on-demand via the "run-e2e" PR label.
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
     runs-on: blacksmith-4vcpu-ubuntu-2404
