@@ -6,17 +6,22 @@ on:
       - opened
       - synchronize
       - reopened
+  # Required checks must also run on merge_group when merge queue is enabled,
+  # otherwise the queue waits for PR-only statuses that never appear on the
+  # temporary merge-group SHA.
+  merge_group:
 
 permissions: {}
 
 concurrency:
-  group: "on-pull-requests-${{ github.event.pull_request.number }}"
+  group: "on-pull-requests-${{ github.event.pull_request.number || github.event.merge_group.head_sha || github.ref }}"
   cancel-in-progress: true
 
 jobs:
   release-freeze-check:
     name: Release Freeze Check
-    # Always run so it can be a required status check - passes immediately for non-release-please PRs.
+    # Always run so it can be a required status check - passes immediately for
+    # non-release-please PRs and merge queue runs.
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read # Required to inspect the repository context for release-please PRs.
@@ -25,6 +30,12 @@ jobs:
       - name: Check if this requires freeze validation
         id: check-context
         run: |
+          if [ "$EVENT_NAME" = "merge_group" ]; then
+            echo "should_check=false" >> "$GITHUB_OUTPUT"
+            echo "Merge queue run - passing release freeze check."
+            exit 0
+          fi
+
           if [[ "$HEAD_REF" == release-please--* ]]; then
             echo "should_check=true" >> "$GITHUB_OUTPUT"
             echo "🔖 This is a release-please PR - checking freeze status"
@@ -33,6 +44,7 @@ jobs:
             echo "✅ Not a release-please PR - passing automatically"
           fi
         env:
+          EVENT_NAME: ${{ github.event_name }}
           HEAD_REF: ${{ github.head_ref }}
 
       - name: Check if release is frozen
@@ -141,6 +153,7 @@ jobs:
           fetch-depth: 0
 
       - name: Dependency review
+        if: ${{ github.event_name == 'pull_request' }}
         uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
         with:
           fail-on-severity: high
@@ -148,6 +161,10 @@ jobs:
           # allow-licenses: MIT
           license-check: false
           comment-summary-in-pr: on-failure
+
+      - name: Skip dependency review for merge queue
+        if: ${{ github.event_name == 'merge_group' }}
+        run: echo "Dependency Review only has PR diff context; PR run already validated dependencies before merge queue."
 
   # Fast feedback on every PR push: lint + typecheck + unit tests.
   # Full E2E runs in the separate "Platform E2E Tests" workflow on merge queue
