@@ -187,13 +187,14 @@ jobs:
         id: check-release-please
         working-directory: .
         run: |
-          if [[ "$HEAD_REF" == release-please--* ]]; then
+          if [ "$EVENT_NAME" = "pull_request" ] && [[ "$HEAD_REF" == release-please--* ]]; then
             echo "is-release-please=true" >> "$GITHUB_OUTPUT"
             echo "Release-please PR detected; generated files will be auto-committed if needed."
           else
             echo "is-release-please=false" >> "$GITHUB_OUTPUT"
           fi
         env:
+          EVENT_NAME: ${{ github.event_name }}
           HEAD_REF: ${{ github.head_ref }}
 
       - name: Checkout project

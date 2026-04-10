@@ -641,7 +641,7 @@ jobs:
           name: playwright-report
           path: platform/e2e-tests/playwright-report/
           # Shorter retention for success, full retention for failures
-          retention-days: ${{ needs.platform-e2e-tests.result == 'success' && 7 || 30 }}
+          retention-days: ${{ (needs.platform-e2e-tests.result == 'success' && needs.platform-quickstart-e2e-tests.result == 'success' && needs.platform-vault-k8s-e2e-tests.result == 'success') && 7 || 30 }}
 
       - name: Write test summary
         if: always()
