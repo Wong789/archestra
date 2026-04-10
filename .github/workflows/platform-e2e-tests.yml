@@ -2,11 +2,13 @@ name: Platform E2E Tests
 
 # Runs automatically in merge queue as the required E2E gate.
 # For PRs, add the "run-e2e" label to trigger the full E2E suite on demand.
-# Remove and re-add the label to re-trigger after new commits.
+# New commits to labeled PRs re-run E2E automatically.
 on:
+  workflow_dispatch:
   pull_request:
     types:
       - labeled
+      - synchronize
   merge_group:
 
 permissions: {}
@@ -18,7 +20,7 @@ concurrency:
 jobs:
   platform-e2e-tests:
     name: Platform E2E Tests
-    if: ${{ github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.label.name == 'run-e2e') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || (github.event_name == 'pull_request' && (github.event.label.name == 'run-e2e' || contains(github.event.pull_request.labels.*.name, 'run-e2e'))) }}
     permissions:
       contents: write # Required for release-please codegen commits and checked-in report artifacts.
       security-events: write # Required for Docker Scout SARIF uploads.
