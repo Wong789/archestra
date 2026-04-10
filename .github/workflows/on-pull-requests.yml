@@ -177,7 +177,7 @@ jobs:
       - name: Checkout project
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          persist-credentials: ${{ steps.check-release-please.outputs.is-release-please == 'true' }} # zizmor: ignore[artipacked] release-please PRs need push credentials for generated updates.
+          persist-credentials: false
           ref: ${{ steps.check-release-please.outputs.is-release-please == 'true' && github.head_ref || '' }}
           fetch-depth: 1
 
@@ -248,7 +248,25 @@ jobs:
 
           # Generate migrations and ensure no new migrations are created
           echo "Checking for missing database migrations..."
-          pnpm db:generate
+          set +e
+          if timeout 15s pnpm db:generate > /tmp/db_generate_output.txt 2>&1; then
+            output=$(cat /tmp/db_generate_output.txt)
+            echo "$output"
+            if echo "$output" | grep -q "❯\|Is.*table created or renamed"; then
+              echo "::error::Interactive prompt detected. Pending database migrations need to be committed."
+              exit 1
+            fi
+          else
+            exit_code=$?
+            cat /tmp/db_generate_output.txt 2>/dev/null || true
+            if [ $exit_code -eq 124 ]; then
+              echo "::error::pnpm db:generate timed out, likely waiting for interactive migration input."
+            else
+              echo "::error::pnpm db:generate failed with exit code $exit_code."
+            fi
+            exit 1
+          fi
+          set -e
 
           if ! git diff --exit-code -- backend/src/database/migrations/ || ! git diff --cached --exit-code -- backend/src/database/migrations/; then
             echo "::error::Database schema changes require a migration. Please run 'pnpm db:generate' locally and commit the generated migration."
