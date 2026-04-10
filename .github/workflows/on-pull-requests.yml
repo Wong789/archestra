@@ -4,9 +4,7 @@ on:
   pull_request:
     types:
       - opened
-      - edited
       - synchronize
-      - labeled
   # You can use the merge_group event to trigger your GitHub Actions workflow when
   # a pull request is added to a merge queue
   # https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue#triggering-merge-group-checks-with-github-actions
@@ -89,29 +87,8 @@ jobs:
           echo "::error::❄️ Release freeze is active. Merging release-please PRs is blocked."
           exit 1
 
-  lint-pr-title:
-    name: PR Title Linter
-    if: github.event_name == 'pull_request'
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout project
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      - name: Lint PR title
-        uses: grafana/shared-workflows/actions/lint-pr-title@5f4c48c03125ef179c36a821d5b801fc876e672c # v1.2.1
-        with:
-          config-path: "${{ github.workspace }}/.github/commitlint.config.js" # zizmor: ignore[template-injection] workspace path is provided by GitHub and not user input.
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   license-compliance-check:
     name: License Compliance Check
-    if: github.event.action != 'edited' && github.event.action != 'labeled'
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -153,7 +130,7 @@ jobs:
 
   supply-chain-policy:
     name: Supply Chain Policy
-    if: github.event_name == 'pull_request' && github.event.action != 'edited' && github.event.action != 'labeled'
+    if: github.event_name == 'pull_request'
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -169,7 +146,7 @@ jobs:
 
   dependency-review:
     name: Dependency Review
-    if: github.event_name == 'pull_request' && github.event.action != 'edited' && github.event.action != 'labeled'
+    if: github.event_name == 'pull_request'
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read # Required to checkout the repository and diff dependency manifests.
@@ -194,7 +171,7 @@ jobs:
   # Full E2E suite runs only in merge queue (or on-demand via "run-e2e" PR label).
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
-    if: github.event_name == 'pull_request' && github.event.action != 'edited' && github.event.action != 'labeled'
+    if: github.event_name == 'pull_request'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -230,28 +207,6 @@ jobs:
       # They should always succeed quickly in pull requests
       # while on merge queues they should run normally and fail if needed
       should-skip-running-and-always-succeed: ${{ github.event_name == 'pull_request' }}
-      is-fork-pr: ${{ github.event.pull_request.head.repo.fork == true }}
-    secrets:
-      TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
-      TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-      GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
-      GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
-
-  # On-demand E2E: add the "run-e2e" label to a PR to trigger the full E2E suite.
-  # Runs natively on the PR branch with full secrets. Remove and re-add label to re-trigger.
-  platform-linting-and-tests-on-demand:
-    name: Platform Linting and Tests (On Demand)
-    if: github.event.action == 'labeled' && github.event.label.name == 'run-e2e'
-    permissions:
-      contents: write # Required for release-please codegen commits and checked-in report artifacts.
-      security-events: write # Required for Docker Scout SARIF uploads.
-      id-token: write # Required for Workload Identity Federation.
-      pull-requests: write # Required for Docker Scout to write a comment to a PR.
-    uses: ./.github/workflows/platform-linting-and-tests.yml
-    with:
-      should-skip-running-and-always-succeed: false
       is-fork-pr: ${{ github.event.pull_request.head.repo.fork == true }}
     secrets:
       TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}

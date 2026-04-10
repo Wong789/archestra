@@ -1,0 +1,34 @@
+name: PR Title Linter
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - synchronize
+
+permissions: {}
+
+concurrency:
+  group: "pr-title-linter-${{ github.event.pull_request.number }}"
+  cancel-in-progress: true
+
+jobs:
+  lint-pr-title:
+    name: PR Title Linter
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Lint PR title
+        uses: grafana/shared-workflows/actions/lint-pr-title@5f4c48c03125ef179c36a821d5b801fc876e672c # v1.2.1
+        with:
+          config-path: "${{ github.workspace }}/.github/commitlint.config.js" # zizmor: ignore[template-injection] workspace path is provided by GitHub and not user input.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
