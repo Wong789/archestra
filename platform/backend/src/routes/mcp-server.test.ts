@@ -11,6 +11,7 @@ const {
   connectAndGetToolsMock,
   exchangeEnterpriseManagedCredentialMock,
   hasPermissionMock,
+  invalidateConnectionsForServerMock,
   inspectServerMock,
   MockMcpServerConnectionTimeoutError,
   MockMcpServerNotReadyError,
@@ -18,6 +19,7 @@ const {
   connectAndGetToolsMock: vi.fn(),
   exchangeEnterpriseManagedCredentialMock: vi.fn(),
   hasPermissionMock: vi.fn(),
+  invalidateConnectionsForServerMock: vi.fn(),
   inspectServerMock: vi.fn(),
   MockMcpServerNotReadyError: class MockMcpServerNotReadyError extends Error {},
   MockMcpServerConnectionTimeoutError: class MockMcpServerConnectionTimeoutError extends Error {},
@@ -28,6 +30,7 @@ vi.mock("@/clients/mcp-client", () => ({
   McpServerConnectionTimeoutError: MockMcpServerConnectionTimeoutError,
   default: {
     connectAndGetTools: connectAndGetToolsMock,
+    invalidateConnectionsForServer: invalidateConnectionsForServerMock,
     inspectServer: inspectServerMock,
   },
 }));
@@ -62,6 +65,7 @@ describe("mcp server inspect route", () => {
     connectAndGetToolsMock.mockReset();
     exchangeEnterpriseManagedCredentialMock.mockReset();
     hasPermissionMock.mockReset();
+    invalidateConnectionsForServerMock.mockReset();
     inspectServerMock.mockReset();
     global.fetch = originalFetch;
     await app.close();
@@ -147,6 +151,86 @@ describe("mcp server inspect route", () => {
       urlBuilder: (id) => `/api/mcp_server/${id}/inspect`,
       payload: { method: "tools/list" },
     });
+  });
+
+  test("filters team-installed connections by selected assignment team", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    hasPermissionMock.mockResolvedValueOnce({ success: false });
+
+    const organization = await makeOrganization();
+    const selectedTeam = await makeTeam(organization.id, user.id, {
+      name: "Selected Team",
+    });
+    const otherTeam = await makeTeam(organization.id, user.id, {
+      name: "Other Team",
+    });
+    await makeTeamMember(selectedTeam.id, user.id);
+    await makeTeamMember(otherTeam.id, user.id);
+
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const selectedServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+      teamId: selectedTeam.id,
+    });
+    await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+      teamId: otherTeam.id,
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/mcp_server?assignmentScope=team&assignmentTeamIds=${selectedTeam.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().map((server: { id: string }) => server.id)).toEqual([
+      selectedServer.id,
+    ]);
+  });
+
+  test("filters out personal connections whose owner is not in the selected assignment team", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeUser,
+  }) => {
+    hasPermissionMock.mockResolvedValueOnce({ success: true });
+
+    const organization = await makeOrganization();
+    const otherUser = await makeUser({ email: "other-owner@example.com" });
+    const selectedTeam = await makeTeam(organization.id, user.id, {
+      name: "Selected Team",
+    });
+    await makeTeamMember(selectedTeam.id, user.id);
+
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const ownPersonalServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+    await makeMcpServer({
+      ownerId: otherUser.id,
+      catalogId: catalog.id,
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/mcp_server?assignmentScope=team&assignmentTeamIds=${selectedTeam.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().map((server: { id: string }) => server.id)).toEqual([
+      ownPersonalServer.id,
+    ]);
   });
 
   test("automatically retries protected remote MCP server installation with the current identity-provider access token", async ({

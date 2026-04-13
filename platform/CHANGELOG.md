@@ -1,5 +1,109 @@
 # Changelog
 
+## [1.2.11](https://github.com/archestra-ai/archestra/compare/platform-v1.2.10...platform-v1.2.11) (2026-04-12)
+
+
+### Features
+
+* support explicit OAuth endpoints without discovery ([#3727](https://github.com/archestra-ai/archestra/issues/3727)) ([c2fd828](https://github.com/archestra-ai/archestra/commit/c2fd82852cb07a0725ba91480506db505cd37fd2))
+
+
+### Miscellaneous Chores
+
+* Fix chat OAuth re-authentication flow ([#3729](https://github.com/archestra-ai/archestra/issues/3729)) ([823d756](https://github.com/archestra-ai/archestra/commit/823d7569b23e94c036f9b9772fce01928be33b81))
+
+## [1.2.10](https://github.com/archestra-ai/archestra/compare/platform-v1.2.9...platform-v1.2.10) (2026-04-11)
+
+
+### Features
+
+* make posthog analytics configurable ([#3707](https://github.com/archestra-ai/archestra/issues/3707)) ([7ae9101](https://github.com/archestra-ai/archestra/commit/7ae9101aad7ce1c1cc5843f1c2d0e67fa7d5132f))
+
+
+### Bug Fixes
+
+* `/llm/costs` table scrolling ([#3722](https://github.com/archestra-ai/archestra/issues/3722)) ([6a42ba8](https://github.com/archestra-ai/archestra/commit/6a42ba8de8ab971295e96c499d887c7d790a691d))
+* apply MCP OAuth lifetime for gateway slugs ([#3711](https://github.com/archestra-ai/archestra/issues/3711)) ([362aaec](https://github.com/archestra-ai/archestra/commit/362aaec5126ce828727961ed46207e998c5f6627))
+* Bedrock tool name encoding ([#3706](https://github.com/archestra-ai/archestra/issues/3706)) ([0e2c2d1](https://github.com/archestra-ai/archestra/commit/0e2c2d1521c3e0a86fa573e95f6c8695867dc6dd))
+* costs timeframes and surface limit reset settings ([#3709](https://github.com/archestra-ai/archestra/issues/3709)) ([6e4154b](https://github.com/archestra-ai/archestra/commit/6e4154b292bb4fc8c0abce36d7f6de7b425a5859))
+* jira oauth discovery overrides ([#3721](https://github.com/archestra-ai/archestra/issues/3721)) ([2c4cf8f](https://github.com/archestra-ai/archestra/commit/2c4cf8f39248272cc2b97b3752870c07914a6c2a))
+* OIDC discovery trusted origins for IdP registration ([#3714](https://github.com/archestra-ai/archestra/issues/3714)) ([adb5f5e](https://github.com/archestra-ai/archestra/commit/adb5f5edb39868ede3091ec61324b2872abb1385))
+* preserve shared chat agents on fork ([#3715](https://github.com/archestra-ai/archestra/issues/3715)) ([252edfc](https://github.com/archestra-ai/archestra/commit/252edfc0178e60f975ba4597a0e7154a30312aaf))
+* reranker model dropdown labels ([#3704](https://github.com/archestra-ai/archestra/issues/3704)) ([ebd1c8a](https://github.com/archestra-ai/archestra/commit/ebd1c8a1268d0a55a897628e57a427ffd21b8458))
+* session logs loading state ([#3712](https://github.com/archestra-ai/archestra/issues/3712)) ([ffba126](https://github.com/archestra-ai/archestra/commit/ffba126525dc0824ebe686817f97895219944bad))
+
+
+### Miscellaneous Chores
+
+* **ci:** add ID-JAG MCP e2e test ([#3702](https://github.com/archestra-ai/archestra/issues/3702)) ([1a5078a](https://github.com/archestra-ai/archestra/commit/1a5078a7a65134be0ee0009b3710c79d256034ee))
+* **deps:** bump next from 16.1.7 to 16.2.3 in /platform/frontend ([#3708](https://github.com/archestra-ai/archestra/issues/3708)) ([d47967c](https://github.com/archestra-ai/archestra/commit/d47967cf4635804c79951668813200831cb0af1a))
+* use neutral token prefixes with legacy support ([#3719](https://github.com/archestra-ai/archestra/issues/3719)) ([db5929c](https://github.com/archestra-ai/archestra/commit/db5929cb83d4aaef565836f8a934201b6396fbff))
+
+## [1.2.9](https://github.com/archestra-ai/archestra/compare/platform-v1.2.8...platform-v1.2.9) (2026-04-10)
+
+
+### Bug Fixes
+
+* apply MCP OAuth lifetime for inspector resources ([#3701](https://github.com/archestra-ai/archestra/issues/3701)) ([e4a4592](https://github.com/archestra-ai/archestra/commit/e4a45927dcbeb220b58f758c4ebea28175b00a59))
+
+## [1.2.8](https://github.com/archestra-ai/archestra/compare/platform-v1.2.7...platform-v1.2.8) (2026-04-10)
+
+
+### Features
+
+* add configurable MCP OAuth token lifetime settings ([#3685](https://github.com/archestra-ai/archestra/issues/3685)) ([e68db34](https://github.com/archestra-ai/archestra/commit/e68db34053208ce672f4e3f01ae1f60f8c2f7122))
+
+
+### Bug Fixes
+
+* normalize dangling tool calls across messages ([#3684](https://github.com/archestra-ai/archestra/issues/3684)) ([36a731c](https://github.com/archestra-ai/archestra/commit/36a731c24df4893d09d5e65e3eb049647a239600))
+* remove unused vitest CI flag ([#3694](https://github.com/archestra-ai/archestra/issues/3694)) ([9b606f5](https://github.com/archestra-ai/archestra/commit/9b606f5b33ce3be5bb4f322d03441acf4405a055))
+* stabilize e2e CI setup ([#3693](https://github.com/archestra-ai/archestra/issues/3693)) ([14bbeb5](https://github.com/archestra-ai/archestra/commit/14bbeb5b2deb2032b6baea55985ae108b09322d8))
+
+
+### Miscellaneous Chores
+
+* move API e2e coverage into route tests and stabilize CI ([#3683](https://github.com/archestra-ai/archestra/issues/3683)) ([e4f70e3](https://github.com/archestra-ai/archestra/commit/e4f70e37b943085f97b7c9f4beb21a7b91e8d2b5))
+
+## [1.2.7](https://github.com/archestra-ai/archestra/compare/platform-v1.2.6...platform-v1.2.7) (2026-04-08)
+
+
+### Miscellaneous Chores
+
+* reduce noisy Sentry span volume ([#3681](https://github.com/archestra-ai/archestra/issues/3681)) ([650ae07](https://github.com/archestra-ai/archestra/commit/650ae075654c2790f64e854a73dd3574c3860ea9))
+
+## [1.2.6](https://github.com/archestra-ai/archestra/compare/platform-v1.2.5...platform-v1.2.6) (2026-04-08)
+
+
+### Features
+
+* **helm:** improve initContainers config options ([#3680](https://github.com/archestra-ai/archestra/issues/3680)) ([8acd982](https://github.com/archestra-ai/archestra/commit/8acd982cb4c07de448c314ac52ef00aa32828b2b))
+
+
+### Bug Fixes
+
+* MCP tool assignment scoping ([#3675](https://github.com/archestra-ai/archestra/issues/3675)) ([f2687c3](https://github.com/archestra-ai/archestra/commit/f2687c31724297d3c9a2b0a9040859616576c120))
+* regenerate API client to remove hardcoded localhost baseUrl ([#3679](https://github.com/archestra-ai/archestra/issues/3679)) ([7b01f39](https://github.com/archestra-ai/archestra/commit/7b01f397026d2a1873fec4cc427f1bf759998236))
+
+
+### Dependencies
+
+* bump drizzle-orm from 0.45.1 to 0.45.2 in /platform ([#3668](https://github.com/archestra-ai/archestra/issues/3668)) ([b27a61a](https://github.com/archestra-ai/archestra/commit/b27a61a6994f4f8c957020777b0400bc21327086))
+
+
+### Code Refactoring
+
+* remove hardcoded userIsAgentAdmin from A2A and token selection paths ([#3677](https://github.com/archestra-ai/archestra/issues/3677)) ([c54d5b7](https://github.com/archestra-ai/archestra/commit/c54d5b7f95d4eda9298955b5b4ea1fa0c84542da))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump @hono/node-server from 1.19.10 to 1.19.13 in /platform/mcp_server_docker_image ([#3673](https://github.com/archestra-ai/archestra/issues/3673)) ([58850c1](https://github.com/archestra-ai/archestra/commit/58850c1f634ebf00b3033ad57dd4d5b7aee26706))
+* **deps:** bump @hono/node-server from 1.19.12 to 1.19.13 in /platform/e2e-tests/test-mcp-servers/mcp-server-jwks-keycloak ([#3674](https://github.com/archestra-ai/archestra/issues/3674)) ([5c5ffdb](https://github.com/archestra-ai/archestra/commit/5c5ffdbc5ca8c527d2c7ece0aaa48a1ec7e0c2e1))
+* **deps:** bump hono from 4.12.7 to 4.12.12 in /platform/mcp_server_docker_image ([#3669](https://github.com/archestra-ai/archestra/issues/3669)) ([1447d5f](https://github.com/archestra-ai/archestra/commit/1447d5f0a7eb480060ad5efb22aa7050751d22e6))
+* **deps:** bump hono from 4.12.9 to 4.12.12 in /platform/e2e-tests/test-mcp-servers/mcp-server-jwks-keycloak ([#3672](https://github.com/archestra-ai/archestra/issues/3672)) ([b805ad6](https://github.com/archestra-ai/archestra/commit/b805ad67b00f2513d3b462e2ee9aff0153a60cb0))
+* tighten-up dynamic credential resolution ([#3663](https://github.com/archestra-ai/archestra/issues/3663)) ([daf2c84](https://github.com/archestra-ai/archestra/commit/daf2c84d1ce6c18c183f526bc0ba0f3f45c44ef7))
+
 ## [1.2.5](https://github.com/archestra-ai/archestra/compare/platform-v1.2.4...platform-v1.2.5) (2026-04-08)
 
 
