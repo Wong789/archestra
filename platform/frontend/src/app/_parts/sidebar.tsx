@@ -49,7 +49,7 @@ import {
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
-import { useEnterpriseFeature } from "@/lib/config/config.query";
+
 import { useGithubStars } from "@/lib/github/github.query";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils";
@@ -403,7 +403,6 @@ export function AppSidebar() {
   const formattedStarCount = starCount ?? "";
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
   const appIconLogo = useAppIconLogo();
-  const knowledgeBaseEnabled = useEnterpriseFeature("knowledgeBase");
   // Connect page requires at least one of these (OR logic)
   const { data: canReadAgent } = useHasPermissions({ agent: ["read"] });
   const { data: canReadLlmProxy } = useHasPermissions({
@@ -413,15 +412,6 @@ export function AppSidebar() {
     mcpGateway: ["read"],
   });
   const showConnect = canReadAgent || canReadLlmProxy || canReadMcpGateway;
-
-  // Filter nav groups based on enterprise features
-  const filteredNavGroups = React.useMemo(() => {
-    if (knowledgeBaseEnabled) return contentNavGroups;
-    return contentNavGroups.map((group) => ({
-      ...group,
-      items: group.items.filter((item) => item.title !== "Knowledge"),
-    }));
-  }, [knowledgeBaseEnabled]);
 
   // Build additional links for UserButton popout menu
   const userMenuLinks = React.useMemo(() => {
@@ -472,7 +462,7 @@ export function AppSidebar() {
           <>
             <NavPrimary
               items={headerNavItems}
-              groups={filteredNavGroups}
+              groups={contentNavGroups}
               pathname={pathname}
               searchParams={searchParams}
               permissionMap={permissionMap}

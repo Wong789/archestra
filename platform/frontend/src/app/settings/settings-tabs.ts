@@ -1,14 +1,12 @@
 import { requiredPagePermissionsMap } from "@shared/access-control";
 import { usePermissionMap } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
-import { useEnterpriseFeature } from "@/lib/config/config.query";
+
 import { useSecretsType } from "@/lib/secrets.query";
 
 export function useSettingsTabs() {
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
   const { data: secretsType } = useSecretsType();
-  const knowledgeBaseEnabled = useEnterpriseFeature("knowledgeBase");
-
   return [
     { label: "Your Account", href: "/settings/account" },
     ...(permissionMap?.["/settings/api-keys"]
@@ -23,7 +21,7 @@ export function useSettingsTabs() {
     ...(permissionMap?.["/settings/llm"]
       ? [{ label: "LLM", href: "/settings/llm" }]
       : []),
-    ...(knowledgeBaseEnabled && permissionMap?.["/settings/knowledge"]
+    ...(permissionMap?.["/settings/knowledge"]
       ? [{ label: "Knowledge", href: "/settings/knowledge" }]
       : []),
     ...(permissionMap?.["/settings/users"]
