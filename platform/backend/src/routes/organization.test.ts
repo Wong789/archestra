@@ -303,6 +303,17 @@ describe("organization routes", () => {
       expect(response.json().showTwoFactor).toBe(true);
     });
 
+    test("updates slimChatErrorUi toggle", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/appearance-settings",
+        payload: { slimChatErrorUi: true },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().slimChatErrorUi).toBe(true);
+    });
+
     test("accepts favicon as valid PNG", async () => {
       const response = await app.inject({
         method: "PATCH",
@@ -662,6 +673,45 @@ describe("organization routes", () => {
       expect(changeKeyResponse.json().error.message).toContain(
         "Embedding API key cannot be changed once configured",
       );
+    });
+  });
+
+  describe("PATCH /api/organization/mcp-settings", () => {
+    test("updates the MCP OAuth access token lifetime", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/mcp-settings",
+        payload: {
+          mcpOauthAccessTokenLifetimeSeconds: 604_800,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().mcpOauthAccessTokenLifetimeSeconds).toBe(604_800);
+    });
+
+    test("rejects values below the minimum lifetime", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/mcp-settings",
+        payload: {
+          mcpOauthAccessTokenLifetimeSeconds: 299,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    test("rejects values above the maximum lifetime", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/mcp-settings",
+        payload: {
+          mcpOauthAccessTokenLifetimeSeconds: 31_536_001,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
     });
   });
 

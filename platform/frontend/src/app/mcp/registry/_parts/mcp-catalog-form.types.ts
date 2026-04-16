@@ -1,24 +1,119 @@
 import { LocalConfigFormSchema } from "@shared";
 import { z } from "zod";
 
-// Simplified OAuth config schema
-export const oauthConfigSchema = z.object({
-  client_id: z.string().optional().or(z.literal("")),
-  client_secret: z.string().optional().or(z.literal("")),
-  redirect_uris: z.string().min(1, "At least one redirect URI is required"),
-  scopes: z.string().optional().or(z.literal("")),
-  supports_resource_metadata: z.boolean(),
-  // OAuth Server URL for local servers (since they don't have a serverUrl field)
-  // Used for OAuth discovery/authorization, NOT for tool execution
-  oauthServerUrl: z
-    .string()
-    .url({ error: "Must be a valid URL" })
-    .refine((val) => val.startsWith("http://") || val.startsWith("https://"), {
-      message: "Must be an HTTP or HTTPS URL",
-    })
-    .optional()
-    .or(z.literal("")),
+const HEADER_NAME_REGEX = /^[A-Za-z0-9-]+$/;
+
+const headerNameSchema = z
+  .string()
+  .trim()
+  .min(1, "Header name is required")
+  .max(128, "Header name is too long")
+  .regex(
+    HEADER_NAME_REGEX,
+    "Header name must contain only alphanumeric characters and hyphens",
+  );
+
+const additionalHeaderSchema = z.object({
+  fieldName: z.string().optional(),
+  headerName: headerNameSchema,
+  promptOnInstallation: z.boolean(),
+  required: z.boolean(),
+  value: z.string().optional(),
+  description: z.string().optional().or(z.literal("")),
 });
+
+// Simplified OAuth config schema
+export const oauthConfigSchema = z
+  .object({
+    client_id: z.string().optional().or(z.literal("")),
+    client_secret: z.string().optional().or(z.literal("")),
+    redirect_uris: z.string().min(1, "At least one redirect URI is required"),
+    scopes: z.string().optional().or(z.literal("")),
+    supports_resource_metadata: z.boolean(),
+    authServerUrl: z
+      .string()
+      .url({ error: "Must be a valid URL" })
+      .refine(
+        (val) => val.startsWith("http://") || val.startsWith("https://"),
+        {
+          message: "Must be an HTTP or HTTPS URL",
+        },
+      )
+      .optional()
+      .or(z.literal("")),
+    authorizationEndpoint: z
+      .string()
+      .url({ error: "Must be a valid URL" })
+      .refine(
+        (val) => val.startsWith("http://") || val.startsWith("https://"),
+        {
+          message: "Must be an HTTP or HTTPS URL",
+        },
+      )
+      .optional()
+      .or(z.literal("")),
+    wellKnownUrl: z
+      .string()
+      .url({ error: "Must be a valid URL" })
+      .refine(
+        (val) => val.startsWith("http://") || val.startsWith("https://"),
+        {
+          message: "Must be an HTTP or HTTPS URL",
+        },
+      )
+      .optional()
+      .or(z.literal("")),
+    resourceMetadataUrl: z
+      .string()
+      .url({ error: "Must be a valid URL" })
+      .refine(
+        (val) => val.startsWith("http://") || val.startsWith("https://"),
+        {
+          message: "Must be an HTTP or HTTPS URL",
+        },
+      )
+      .optional()
+      .or(z.literal("")),
+    tokenEndpoint: z
+      .string()
+      .url({ error: "Must be a valid URL" })
+      .refine(
+        (val) => val.startsWith("http://") || val.startsWith("https://"),
+        {
+          message: "Must be an HTTP or HTTPS URL",
+        },
+      )
+      .optional()
+      .or(z.literal("")),
+    // OAuth Server URL for local servers (since they don't have a serverUrl field)
+    // Used for OAuth discovery/authorization, NOT for tool execution
+    oauthServerUrl: z
+      .string()
+      .url({ error: "Must be a valid URL" })
+      .refine(
+        (val) => val.startsWith("http://") || val.startsWith("https://"),
+        {
+          message: "Must be an HTTP or HTTPS URL",
+        },
+      )
+      .optional()
+      .or(z.literal("")),
+  })
+  .superRefine((value, ctx) => {
+    if (Boolean(value.authorizationEndpoint) !== Boolean(value.tokenEndpoint)) {
+      const message = "Authorization and token endpoints must be set together";
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message,
+        path: ["authorizationEndpoint"],
+      });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message,
+        path: ["tokenEndpoint"],
+      });
+    }
+  });
 
 const enterpriseManagedConfigSchema = z.object({
   resourceIdentifier: z.string().optional(),
@@ -63,6 +158,8 @@ export const formSchema = z
       "oauth",
       "enterprise_managed",
     ]),
+    authHeaderName: headerNameSchema.optional().or(z.literal("")),
+    additionalHeaders: z.array(additionalHeaderSchema).optional(),
     oauthConfig: oauthConfigSchema.optional(),
     enterpriseManagedConfig: enterpriseManagedConfigSchema
       .nullable()
@@ -88,6 +185,30 @@ export const formSchema = z
     scope: z.enum(["personal", "team", "org"]).optional(),
     // Team IDs for team-scoped items
     teams: z.array(z.string()).optional(),
+  })
+  .superRefine((data, ctx) => {
+    const normalizedHeaders = new Set<string>();
+    const authHeaderName = data.authHeaderName?.trim();
+
+    if (
+      (data.authMethod === "bearer" || data.authMethod === "raw_token") &&
+      authHeaderName
+    ) {
+      normalizedHeaders.add(authHeaderName.toLowerCase());
+    }
+
+    for (const [index, header] of (data.additionalHeaders ?? []).entries()) {
+      const normalizedHeaderName = header.headerName.toLowerCase();
+      if (normalizedHeaders.has(normalizedHeaderName)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Header names must be unique",
+          path: ["additionalHeaders", index, "headerName"],
+        });
+        continue;
+      }
+      normalizedHeaders.add(normalizedHeaderName);
+    }
   })
   .refine(
     (data) => {
