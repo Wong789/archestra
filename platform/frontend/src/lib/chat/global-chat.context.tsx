@@ -6,7 +6,6 @@ import {
   EXTERNAL_AGENT_ID_HEADER,
   getArchestraToolShortName,
   isChatErrorResponse,
-  PERSISTED_CHAT_ERROR_PART_TYPE,
   makeSwapAgentPokeText,
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
@@ -35,10 +34,7 @@ import {
 import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils";
 import { useGenerateConversationTitle } from "@/lib/chat/chat.query";
 import { restoreRenderableAssistantParts } from "@/lib/chat/chat-session-utils";
-import {
-  conversationStorageKeys,
-  getChatExternalAgentId,
-} from "@/lib/chat/chat-utils";
+import { getChatExternalAgentId } from "@/lib/chat/chat-utils";
 import {
   extractSwapTargetAgentName,
   getRenderedToolName,
@@ -345,9 +341,6 @@ function ChatSessionHook({
   const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastUserMessageIdRef = useRef<string | null>(null);
   const previousMessagesRef = useRef<UIMessage[]>([]);
-  const [persistedError, setPersistedError] = useState<Error | undefined>(() =>
-    loadPersistedConversationError(conversationId),
-  );
 
   // Track early UI data from data-tool-ui-start events (toolCallId → resource data)
   const [earlyToolUiStarts, setEarlyToolUiStarts] = useState<
@@ -378,8 +371,6 @@ function ChatSessionHook({
     id: conversationId,
     onFinish: ({ message }) => {
       setOptimisticToolCalls([]);
-      clearPersistedConversationError(conversationId);
-      setPersistedError(undefined);
       queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
       });
@@ -411,8 +402,6 @@ function ChatSessionHook({
     },
     onError: (chatError) => {
       setOptimisticToolCalls([]);
-      persistConversationError(conversationId, chatError);
-      setPersistedError(chatError);
       console.error("[ChatSession] Error occurred:", {
         conversationId,
         errorName: chatError.name,
@@ -432,8 +421,6 @@ function ChatSessionHook({
           `[ChatSession] Auto-retrying (${retryCountRef.current}/${MAX_AUTO_RETRIES})...`,
         );
         retryTimerRef.current = setTimeout(() => {
-          clearPersistedConversationError(conversationId);
-          setPersistedError(undefined);
           regenerate();
         }, AUTO_RETRY_DELAY_MS);
       }
@@ -546,32 +533,10 @@ function ChatSessionHook({
   });
   previousMessagesRef.current = messagesWithRestoredAssistantParts;
 
-  const clearPersistedErrorState = useCallback(() => {
-    clearPersistedConversationError(conversationId);
-    setPersistedError(undefined);
-  }, [conversationId]);
-
-  const sendMessageWithErrorReset = useCallback(
-    (message: Parameters<ReturnType<typeof useChat>["sendMessage"]>[0]) => {
-      clearPersistedErrorState();
-      sendMessage(message);
-    },
-    [clearPersistedErrorState, sendMessage],
-  );
-
   // Keep sendMessageRef up-to-date for onFinish callback
-  sendMessageRef.current = sendMessageWithErrorReset;
+  sendMessageRef.current = sendMessage;
 
   const stableMessages = messagesWithRestoredAssistantParts;
-
-  useEffect(() => {
-    if (!hasPersistedChatErrorMessage(stableMessages)) {
-      return;
-    }
-
-    clearPersistedConversationError(conversationId);
-    setPersistedError(undefined);
-  }, [conversationId, stableMessages]);
 
   // Reset retry counter only when the user sends a genuinely new message.
   // We track the last user message ID to avoid resetting during regenerate(),
@@ -639,10 +604,10 @@ function ChatSessionHook({
   sessionRef.current = {
     conversationId,
     messages: stableMessages,
-    sendMessage: sendMessageWithErrorReset,
+    sendMessage,
     stop,
     status,
-    error: error ?? persistedError,
+    error,
     setMessages,
     addToolResult,
     addToolApprovalResponse,
@@ -663,11 +628,10 @@ function ChatSessionHook({
   }, [
     conversationId,
     stableMessages,
-    sendMessageWithErrorReset,
+    sendMessage,
     stop,
     status,
     error,
-    persistedError,
     setMessages,
     addToolResult,
     addToolApprovalResponse,
@@ -680,42 +644,6 @@ function ChatSessionHook({
   ]);
 
   return null;
-}
-
-function loadPersistedConversationError(
-  conversationId: string,
-): Error | undefined {
-  if (typeof window === "undefined") {
-    return undefined;
-  }
-
-  const storedMessage = localStorage.getItem(
-    conversationStorageKeys(conversationId).error,
-  );
-  return storedMessage ? new Error(storedMessage) : undefined;
-}
-
-function persistConversationError(conversationId: string, error: Error) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  try {
-    localStorage.setItem(
-      conversationStorageKeys(conversationId).error,
-      error.message,
-    );
-  } catch {
-    // Storage may be unavailable, but the in-memory session state still shows the error.
-  }
-}
-
-function clearPersistedConversationError(conversationId: string) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  localStorage.removeItem(conversationStorageKeys(conversationId).error);
 }
 
 function getSwapAgentName(toolCall: unknown): string | null {
@@ -767,18 +695,6 @@ function getCurrentArchestraToolShortName(
     fullWhiteLabeling: appConfig.enterpriseFeatures.fullWhiteLabeling,
     includeDefaultPrefix: true,
   });
-}
-
-function hasPersistedChatErrorMessage(messages: UIMessage[]): boolean {
-  return messages.some((message) =>
-    (message.parts ?? []).some(
-      (part) =>
-        typeof part === "object" &&
-        part !== null &&
-        "type" in part &&
-        part.type === PERSISTED_CHAT_ERROR_PART_TYPE,
-    ),
-  );
 }
 
 export function useGlobalChat() {

@@ -2,7 +2,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { conversationStorageKeys } from "@/lib/chat/chat-utils";
 import { ChatProvider, useChatSession } from "./global-chat.context";
 
 const useChatMock = vi.fn();
@@ -62,7 +61,6 @@ describe("useChatSession", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    localStorage.clear();
 
     useGenerateConversationTitleMock.mockReturnValue({
       isPending: false,
@@ -78,32 +76,7 @@ describe("useChatSession", () => {
     });
   });
 
-  it("hydrates a persisted conversation error from localStorage", async () => {
-    const conversationId = "conversation-1";
-    localStorage.setItem(
-      conversationStorageKeys(conversationId).error,
-      JSON.stringify({
-        code: "server_error",
-        message: "Persisted provider failure",
-        isRetryable: true,
-      }),
-    );
-
-    const { result } = renderHook(
-      () => useChatSession({ conversationId, enabled: true }),
-      {
-        wrapper: createWrapper(),
-      },
-    );
-
-    await waitFor(() => {
-      expect(result.current?.error?.message).toContain(
-        "Persisted provider failure",
-      );
-    });
-  });
-
-  it("keeps the last error during retries and clears it after a successful finish", async () => {
+  it("keeps the live chat error during retries and clears it after a successful finish", async () => {
     const conversationId = "conversation-2";
 
     const { result } = renderHook(
@@ -119,6 +92,13 @@ describe("useChatSession", () => {
     });
 
     act(() => {
+      useChatState.error = new Error(
+        JSON.stringify({
+          code: "server_error",
+          message: "Temporary backend failure",
+          isRetryable: true,
+        }),
+      );
       latestUseChatOptions?.onError?.(
         new Error(
           JSON.stringify({
@@ -135,9 +115,6 @@ describe("useChatSession", () => {
         "Temporary backend failure",
       );
     });
-    expect(
-      localStorage.getItem(conversationStorageKeys(conversationId).error),
-    ).toContain("Temporary backend failure");
 
     act(() => {
       useChatState.error = undefined;
@@ -153,14 +130,10 @@ describe("useChatSession", () => {
     await waitFor(() => {
       expect(result.current?.error).toBeUndefined();
     });
-    expect(
-      localStorage.getItem(conversationStorageKeys(conversationId).error),
-    ).toBeNull();
   });
 
-  it("clears a persisted error as soon as a new user message is sent", async () => {
-    const conversationId = "conversation-2b";
-
+  it("forwards new user messages without any client-side error persistence layer", async () => {
+    const conversationId = "conversation-3";
     const { result } = renderHook(
       () => useChatSession({ conversationId, enabled: true }),
       {
@@ -171,24 +144,6 @@ describe("useChatSession", () => {
     await waitFor(() => {
       expect(result.current).not.toBeNull();
       expect(latestUseChatOptions).toBeDefined();
-    });
-
-    act(() => {
-      latestUseChatOptions?.onError?.(
-        new Error(
-          JSON.stringify({
-            code: "server_error",
-            message: "Temporary backend failure",
-            isRetryable: true,
-          }),
-        ),
-      );
-    });
-
-    await waitFor(() => {
-      expect(result.current?.error?.message).toContain(
-        "Temporary backend failure",
-      );
     });
 
     act(() => {
@@ -198,51 +153,10 @@ describe("useChatSession", () => {
       });
     });
 
-    await waitFor(() => {
-      expect(result.current?.error).toBeUndefined();
-    });
-    expect(
-      localStorage.getItem(conversationStorageKeys(conversationId).error),
-    ).toBeNull();
     expect(useChatState.sendMessage).toHaveBeenCalledWith({
       role: "user",
       parts: [{ type: "text", text: "hello" }],
     });
-  });
-
-  it("keeps showing the in-memory error when localStorage persistence fails", async () => {
-    const conversationId = "conversation-3";
-    const storageSpy = vi
-      .spyOn(Storage.prototype, "setItem")
-      .mockImplementation(() => {
-        throw new DOMException("Quota exceeded", "QuotaExceededError");
-      });
-
-    const { result } = renderHook(
-      () => useChatSession({ conversationId, enabled: true }),
-      {
-        wrapper: createWrapper(),
-      },
-    );
-
-    await waitFor(() => {
-      expect(result.current).not.toBeNull();
-      expect(latestUseChatOptions).toBeDefined();
-    });
-
-    act(() => {
-      latestUseChatOptions?.onError?.(new Error("Storage-limited failure"));
-    });
-
-    await waitFor(() => {
-      expect(result.current?.error?.message).toBe("Storage-limited failure");
-    });
-    expect(storageSpy).toHaveBeenCalledWith(
-      conversationStorageKeys(conversationId).error,
-      "Storage-limited failure",
-    );
-
-    storageSpy.mockRestore();
   });
 });
 
