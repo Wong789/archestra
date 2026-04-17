@@ -70,19 +70,30 @@ export function transformFormToApiData(
   }
 
   // Handle OAuth configuration
-  if (values.authMethod === "oauth" && values.oauthConfig) {
-    const redirectUrisList = values.oauthConfig.redirect_uris
-      .split(",")
-      .map((uri) => uri.trim())
-      .filter((uri) => uri.length > 0);
-
+  if (
+    (values.authMethod === "oauth" ||
+      values.authMethod === "oauth_client_credentials") &&
+    values.oauthConfig
+  ) {
+    const isClientCredentials =
+      values.authMethod === "oauth_client_credentials";
+    const redirectUrisList = isClientCredentials
+      ? []
+      : (values.oauthConfig.redirect_uris ?? "")
+          .split(",")
+          .map((uri) => uri.trim())
+          .filter((uri) => uri.length > 0);
     const explicitScopes = values.oauthConfig.scopes?.trim() ?? "";
     const parsedScopes = explicitScopes
       .split(",")
       .map((scope) => scope.trim())
       .filter((scope) => scope.length > 0);
     const hasExplicitScopes = parsedScopes.length > 0;
-    const scopesList = hasExplicitScopes ? parsedScopes : ["read", "write"];
+    const scopesList = hasExplicitScopes
+      ? parsedScopes
+      : isClientCredentials
+        ? []
+        : ["read", "write"];
 
     // For local servers, use oauthServerUrl; for remote servers, use serverUrl
     const oauthServerUrl =
@@ -93,23 +104,34 @@ export function transformFormToApiData(
     data.oauthConfig = {
       name: values.name, // Use name as OAuth provider name
       server_url: oauthServerUrl, // OAuth server URL for discovery/authorization
+      grant_type: isClientCredentials
+        ? "client_credentials"
+        : "authorization_code",
       auth_server_url: values.oauthConfig.authServerUrl || undefined,
-      authorization_endpoint:
-        values.oauthConfig.authorizationEndpoint || undefined,
+      authorization_endpoint: isClientCredentials
+        ? undefined
+        : values.oauthConfig.authorizationEndpoint || undefined,
       well_known_url: values.oauthConfig.wellKnownUrl || undefined,
       resource_metadata_url:
         values.oauthConfig.resourceMetadataUrl || undefined,
       token_endpoint: values.oauthConfig.tokenEndpoint || undefined,
-      client_id: values.oauthConfig.client_id || "",
+      client_id: isClientCredentials ? "" : values.oauthConfig.client_id || "",
       // Only include client_secret if no BYOS vault path is set
       client_secret: values.oauthClientSecretVaultPath
         ? undefined
-        : values.oauthConfig.client_secret || undefined,
+        : isClientCredentials
+          ? undefined
+          : values.oauthConfig.client_secret || undefined,
+      audience: values.oauthConfig.audience || undefined,
       redirect_uris: redirectUrisList,
       scopes: scopesList,
       // Keep fallback scopes aligned with explicit scopes because the backend
       // skips discovery entirely when scopes are configured.
-      default_scopes: hasExplicitScopes ? scopesList : ["read", "write"],
+      default_scopes: hasExplicitScopes
+        ? scopesList
+        : isClientCredentials
+          ? []
+          : ["read", "write"],
       supports_resource_metadata: values.oauthConfig.supports_resource_metadata,
     };
 
@@ -119,33 +141,78 @@ export function transformFormToApiData(
       data.oauthClientSecretVaultKey = values.oauthClientSecretVaultKey;
     }
 
-    // Clear userConfig when using OAuth
-    data.userConfig = {};
-    data.enterpriseManagedConfig = undefined;
+    data.userConfig = isClientCredentials
+      ? {
+          client_id: {
+            type: "string",
+            title: "Client ID",
+            description:
+              "OAuth client ID used to fetch a client-credentials token for this remote MCP server.",
+            promptOnInstallation: true,
+            required: true,
+            default: values.oauthConfig.client_id || undefined,
+            sensitive: false,
+          },
+          client_secret: {
+            type: "string",
+            title: "Client Secret",
+            description:
+              "OAuth client secret used to fetch a client-credentials token for this remote MCP server.",
+            promptOnInstallation: true,
+            required: true,
+            sensitive: true,
+          },
+          audience: {
+            type: "string",
+            title: "Audience",
+            description:
+              "Audience included when requesting the client-credentials token.",
+            promptOnInstallation: true,
+            required: false,
+            default: values.oauthConfig.audience || undefined,
+            sensitive: false,
+          },
+        }
+      : {};
+    data.enterpriseManagedConfig = null;
   } else if (values.authMethod === "enterprise_managed") {
     data.userConfig = {};
-    data.oauthConfig = undefined;
-    data.enterpriseManagedConfig = values.enterpriseManagedConfig ?? null;
+    data.oauthConfig = null;
+    data.enterpriseManagedConfig = values.enterpriseManagedConfig
+      ? {
+          ...values.enterpriseManagedConfig,
+          assertionMode: "exchange",
+        }
+      : null;
+  } else if (values.authMethod === "idp_jwt") {
+    data.userConfig = {};
+    data.oauthConfig = null;
+    data.enterpriseManagedConfig = values.enterpriseManagedConfig
+      ? {
+          identityProviderId: values.enterpriseManagedConfig.identityProviderId,
+          assertionMode: "passthrough",
+          requestedCredentialType: "bearer_token",
+          tokenInjectionMode:
+            values.enterpriseManagedConfig.tokenInjectionMode ??
+            "authorization_bearer",
+          headerName: values.enterpriseManagedConfig.headerName,
+        }
+      : null;
   } else if (values.authMethod === "bearer") {
     data.userConfig = buildStaticHeaderUserConfig(values, {
-      authFieldName: "access_token",
-      authDescription: "Bearer token for authentication",
+      authFieldName: values.includeBearerPrefix
+        ? "access_token"
+        : "raw_access_token",
+      authDescription: values.includeBearerPrefix
+        ? "Bearer token for authentication"
+        : "Token for authentication (sent without Bearer prefix)",
     });
-    // Clear oauthConfig when using Bearer Token
-    data.oauthConfig = undefined;
-    data.enterpriseManagedConfig = undefined;
-  } else if (values.authMethod === "raw_token") {
-    data.userConfig = buildStaticHeaderUserConfig(values, {
-      authFieldName: "raw_access_token",
-      authDescription: "Token for authentication (sent without Bearer prefix)",
-    });
-    // Clear oauthConfig when using Token
-    data.oauthConfig = undefined;
-    data.enterpriseManagedConfig = undefined;
+    data.oauthConfig = null;
+    data.enterpriseManagedConfig = null;
   } else {
     data.userConfig = buildStaticHeaderUserConfig(values);
-    data.oauthConfig = undefined;
-    data.enterpriseManagedConfig = undefined;
+    data.oauthConfig = null;
+    data.enterpriseManagedConfig = null;
   }
 
   // Handle labels
@@ -176,18 +243,21 @@ export function transformCatalogItemToFormValues(
   } | null,
 ): McpCatalogFormValues {
   // Determine auth method
-  let authMethod:
-    | "none"
-    | "bearer"
-    | "raw_token"
-    | "oauth"
-    | "enterprise_managed" = "none";
+  let authMethod: McpCatalogFormValues["authMethod"] = "none";
+  let includeBearerPrefix = true;
   if (item.enterpriseManagedConfig) {
-    authMethod = "enterprise_managed";
+    authMethod =
+      item.enterpriseManagedConfig.assertionMode === "passthrough"
+        ? "idp_jwt"
+        : "enterprise_managed";
   } else if (item.oauthConfig) {
-    authMethod = "oauth";
+    authMethod =
+      item.oauthConfig.grant_type === "client_credentials"
+        ? "oauth_client_credentials"
+        : "oauth";
   } else if (item.userConfig?.raw_access_token) {
-    authMethod = "raw_token";
+    authMethod = "bearer";
+    includeBearerPrefix = false;
   } else if (item.userConfig?.access_token) {
     authMethod = "bearer";
   } else if (
@@ -213,9 +283,11 @@ export function transformCatalogItemToFormValues(
     | {
         client_id: string;
         client_secret: string;
+        audience: string;
         redirect_uris: string;
         scopes: string;
         supports_resource_metadata: boolean;
+        grantType: "authorization_code" | "client_credentials";
         authServerUrl?: string;
         authorizationEndpoint?: string;
         wellKnownUrl?: string;
@@ -231,10 +303,15 @@ export function transformCatalogItemToFormValues(
       client_secret: oauthClientSecretVaultPath
         ? ""
         : item.oauthConfig.client_secret || "",
+      audience:
+        typeof item.userConfig?.audience?.default === "string"
+          ? item.userConfig.audience.default
+          : item.oauthConfig.audience || "",
       redirect_uris: item.oauthConfig.redirect_uris?.join(", ") || "",
       scopes: item.oauthConfig.scopes?.join(", ") || "",
       supports_resource_metadata:
         item.oauthConfig.supports_resource_metadata ?? true,
+      grantType: item.oauthConfig.grant_type ?? "authorization_code",
       authServerUrl: item.oauthConfig.auth_server_url || "",
       authorizationEndpoint: item.oauthConfig.authorization_endpoint || "",
       wellKnownUrl: item.oauthConfig.well_known_url || "",
@@ -359,6 +436,7 @@ export function transformCatalogItemToFormValues(
     serverType: item.serverType as "remote" | "local",
     serverUrl: item.serverUrl || "",
     authMethod,
+    includeBearerPrefix,
     authHeaderName:
       authHeaderConfig?.headerName &&
       !isDefaultAuthorizationHeader(authHeaderConfig.headerName)
@@ -416,24 +494,37 @@ export function transformExternalCatalogToFormValues(
   };
 
   // Determine auth method
-  let authMethod: "none" | "bearer" | "raw_token" | "oauth" = "none";
+  let authMethod: McpCatalogFormValues["authMethod"] = "none";
+  let includeBearerPrefix = true;
   const staticHeaderFields = getHeaderMappedUserConfigEntries(
     server.user_config,
   );
   const authHeaderConfig =
     staticHeaderFields.access_token ?? staticHeaderFields.raw_access_token;
+  const implicitAccessTokenConfig = server.user_config?.access_token;
+  const implicitRawAccessTokenConfig = server.user_config?.raw_access_token;
 
   // Detect bearer/raw_token auth from header-mapped user_config entries.
   if (authHeaderConfig?.fieldName === "raw_access_token") {
-    authMethod = "raw_token";
+    authMethod = "bearer";
+    includeBearerPrefix = false;
   } else if (authHeaderConfig?.fieldName === "access_token") {
+    authMethod = "bearer";
+  } else if (implicitRawAccessTokenConfig) {
+    authMethod = "bearer";
+    includeBearerPrefix = false;
+  } else if (implicitAccessTokenConfig) {
     authMethod = "bearer";
   }
 
   // Rewrite redirect URIs to prefer platform callback
   let oauthConfig: McpCatalogFormValues["oauthConfig"] | undefined;
   if (server.oauth_config && !server.oauth_config.requires_proxy) {
-    authMethod = "oauth";
+    const oauthGrantType = getOAuthGrantType(server.oauth_config);
+    authMethod =
+      oauthGrantType === "client_credentials"
+        ? "oauth_client_credentials"
+        : "oauth";
     const redirectUris =
       server.oauth_config.redirect_uris
         ?.map((u) =>
@@ -445,6 +536,7 @@ export function transformExternalCatalogToFormValues(
     oauthConfig = {
       client_id: server.oauth_config.client_id || "",
       client_secret: server.oauth_config.client_secret || "",
+      audience: "",
       redirect_uris:
         redirectUris ||
         (typeof window !== "undefined"
@@ -453,6 +545,10 @@ export function transformExternalCatalogToFormValues(
       scopes: server.oauth_config.scopes?.join(", ") || "read, write",
       supports_resource_metadata:
         server.oauth_config.supports_resource_metadata ?? true,
+      grantType:
+        oauthGrantType === "client_credentials"
+          ? "client_credentials"
+          : "authorization_code",
       authServerUrl: server.oauth_config.auth_server_url || "",
       authorizationEndpoint:
         getOptionalStringProperty(
@@ -592,6 +688,7 @@ export function transformExternalCatalogToFormValues(
     serverType: server.server.type as "remote" | "local",
     serverUrl: server.server.type === "remote" ? server.server.url : "",
     authMethod,
+    includeBearerPrefix,
     authHeaderName:
       authHeaderConfig?.headerName &&
       !isDefaultAuthorizationHeader(authHeaderConfig.headerName)
@@ -612,12 +709,14 @@ export function transformExternalCatalogToFormValues(
     oauthConfig: oauthConfig ?? {
       client_id: "",
       client_secret: "",
+      audience: "",
       redirect_uris:
         typeof window !== "undefined"
           ? `${window.location.origin}/oauth-callback`
           : "",
       scopes: "read, write",
       supports_resource_metadata: true,
+      grantType: "authorization_code",
       authServerUrl: "",
       authorizationEndpoint: "",
       wellKnownUrl: "",
@@ -775,6 +874,15 @@ function getOptionalStringProperty(
 
   const propertyValue = (value as Record<string, unknown>)[key];
   return typeof propertyValue === "string" ? propertyValue : undefined;
+}
+
+function getOAuthGrantType(
+  oauthConfig: unknown,
+): "authorization_code" | "client_credentials" {
+  return getOptionalStringProperty(oauthConfig, "grant_type") ===
+    "client_credentials"
+    ? "client_credentials"
+    : "authorization_code";
 }
 
 /**

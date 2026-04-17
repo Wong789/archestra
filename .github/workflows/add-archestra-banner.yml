@@ -22,7 +22,7 @@ jobs:
     steps:
       - name: Generate token
         id: generate-token
-        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
         with:
           app-id: ${{ secrets.ARCHESTRA_CONTRIBUTOR_PR_BOT_GITHUB_APP_ID }}
           private-key: ${{ secrets.ARCHESTRA_CONTRIBUTOR_PR_BOT_GITHUB_APP_PRIVATE_KEY }}
@@ -35,7 +35,7 @@ jobs:
         run: |
           MARKER='<!-- archestra-banner:v1 -->'
 
-          BANNER=$'\n\n---\n<!-- archestra-banner:v1 -->\n<a href="https://archestra.ai/contributor-onboard" rel="nofollow noreferrer noopener" target="_blank">\n\n<img width="1954" height="227" alt="Image" src="https://github.com/user-attachments/assets/1f9497f2-96ad-4334-b3a4-c63ff38abdb9"/>\n\n</a>'
+          BANNER=$'\n\n---\n<!-- archestra-banner:v1 -->\n<a href="https://archestra.ai/contributor-onboard" rel="nofollow noreferrer noopener" target="_blank">\n\n<img alt="Image" src="https://github.com/user-attachments/assets/1f9497f2-96ad-4334-b3a4-c63ff38abdb9"/>\n\n</a>'
 
           # Fetch current body via API (avoids YAML/template injection from user-controlled body)
           CURRENT_BODY=$(gh api "repos/$REPO/issues/$ISSUE_NUMBER" --jq '.body // ""')

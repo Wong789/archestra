@@ -27,7 +27,8 @@ export const oauthConfigSchema = z
   .object({
     client_id: z.string().optional().or(z.literal("")),
     client_secret: z.string().optional().or(z.literal("")),
-    redirect_uris: z.string().min(1, "At least one redirect URI is required"),
+    audience: z.string().optional().or(z.literal("")),
+    redirect_uris: z.string().optional().or(z.literal("")),
     scopes: z.string().optional().or(z.literal("")),
     supports_resource_metadata: z.boolean(),
     authServerUrl: z
@@ -98,9 +99,13 @@ export const oauthConfigSchema = z
       )
       .optional()
       .or(z.literal("")),
+    grantType: z.enum(["authorization_code", "client_credentials"]),
   })
   .superRefine((value, ctx) => {
-    if (Boolean(value.authorizationEndpoint) !== Boolean(value.tokenEndpoint)) {
+    if (
+      value.grantType === "authorization_code" &&
+      Boolean(value.authorizationEndpoint) !== Boolean(value.tokenEndpoint)
+    ) {
       const message = "Authorization and token endpoints must be set together";
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -113,9 +118,36 @@ export const oauthConfigSchema = z
         path: ["tokenEndpoint"],
       });
     }
+
+    if (
+      value.grantType === "authorization_code" &&
+      !value.redirect_uris?.trim()
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "At least one redirect URI is required",
+        path: ["redirect_uris"],
+      });
+    }
+
+    if (
+      value.grantType === "client_credentials" &&
+      !value.tokenEndpoint?.trim() &&
+      !value.authServerUrl?.trim() &&
+      !value.wellKnownUrl?.trim()
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Provide a token endpoint, authorization server URL, or well-known URL for client credentials",
+        path: ["tokenEndpoint"],
+      });
+    }
   });
 
 const enterpriseManagedConfigSchema = z.object({
+  identityProviderId: z.string().optional(),
+  assertionMode: z.enum(["exchange", "passthrough"]).optional(),
   resourceIdentifier: z.string().optional(),
   requestedIssuer: z.string().optional(),
   requestedCredentialType: z
@@ -154,10 +186,12 @@ export const formSchema = z
     authMethod: z.enum([
       "none",
       "bearer",
-      "raw_token",
       "oauth",
+      "oauth_client_credentials",
       "enterprise_managed",
+      "idp_jwt",
     ]),
+    includeBearerPrefix: z.boolean(),
     authHeaderName: headerNameSchema.optional().or(z.literal("")),
     additionalHeaders: z.array(additionalHeaderSchema).optional(),
     oauthConfig: oauthConfigSchema.optional(),
@@ -190,10 +224,7 @@ export const formSchema = z
     const normalizedHeaders = new Set<string>();
     const authHeaderName = data.authHeaderName?.trim();
 
-    if (
-      (data.authMethod === "bearer" || data.authMethod === "raw_token") &&
-      authHeaderName
-    ) {
+    if (data.authMethod === "bearer" && authHeaderName) {
       normalizedHeaders.add(authHeaderName.toLowerCase());
     }
 
@@ -268,7 +299,8 @@ export const formSchema = z
     (data) => {
       if (
         data.serverType !== "local" ||
-        data.authMethod !== "enterprise_managed"
+        (data.authMethod !== "enterprise_managed" &&
+          data.authMethod !== "idp_jwt")
       ) {
         return true;
       }
@@ -280,6 +312,19 @@ export const formSchema = z
         "Enterprise-managed credentials require streamable-http transport for self-hosted servers.",
       path: ["localConfig", "transportType"],
     },
-  );
+  )
+  .superRefine((data, ctx) => {
+    if (
+      (data.authMethod === "enterprise_managed" ||
+        data.authMethod === "idp_jwt") &&
+      !data.enterpriseManagedConfig?.identityProviderId
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Identity Provider is required for this authorization mode.",
+        path: ["enterpriseManagedConfig", "identityProviderId"],
+      });
+    }
+  });
 
 export type McpCatalogFormValues = z.infer<typeof formSchema>;
