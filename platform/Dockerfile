@@ -23,6 +23,8 @@ RUN git clone --depth 1 --branch "${KIND_VERSION}" https://github.com/kubernetes
     test "$(git -C /kind rev-parse HEAD)" = "${KIND_COMMIT}" && \
     cd /kind && \
     go mod edit -go=1.25.8 && \
+    # CVE-2026-27141: golang.org/x/net fixed in >= 0.51.0
+    go get golang.org/x/net@v0.51.0 && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /kind-binary .
 RUN git clone --depth 1 --branch "${DOCKER_CLI_VERSION}" https://github.com/docker/cli.git /docker-cli && \
     test "$(git -C /docker-cli rev-parse HEAD)" = "${DOCKER_CLI_COMMIT}" && \
@@ -31,6 +33,12 @@ RUN git clone --depth 1 --branch "${DOCKER_CLI_VERSION}" https://github.com/dock
     go mod edit -go=1.25.8 && \
     # CVE-2026-33186: grpc Improper Authorization fixed in >= 1.79.3
     go get google.golang.org/grpc@v1.79.3 && \
+    # CVE-2026-27141: golang.org/x/net fixed in >= 0.51.0
+    go get golang.org/x/net@v0.51.0 && \
+    # CVE-2026-39883: OTel SDK untrusted search path fixed in >= 1.43.0
+    go get go.opentelemetry.io/otel/sdk@v1.43.0 && \
+    # CVE-2026-34986: go-jose uncaught exception fixed in >= 4.1.4
+    go get github.com/go-jose/go-jose/v4@v4.1.4 && \
     go mod vendor && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
     -ldflags "-X github.com/docker/cli/cli/version.Version=${DOCKER_CLI_VERSION#v}" \
