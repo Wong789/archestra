@@ -171,8 +171,11 @@ RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker
 #     chmod +x /usr/local/bin/kind
 
 RUN apk add --no-cache supervisor && \
-    # CVE-2026-24049: wheel path traversal — not needed at runtime, remove entirely
-    pip uninstall -y wheel 2>/dev/null; rm -rf /usr/lib/python*/ensurepip
+    # CVE-2026-24049: wheel 0.45.1 path traversal. Vendored inside py3-setuptools
+    # (pulled in by supervisor); pip can't upgrade the vendored copy, so delete it.
+    rm -rf /usr/lib/python*/site-packages/setuptools/_vendor/wheel \
+           /usr/lib/python*/site-packages/setuptools/_vendor/wheel-*.dist-info \
+           /usr/lib/python*/ensurepip
 
 # Create postgres directories (user already exists from postgresql package)
 RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \
