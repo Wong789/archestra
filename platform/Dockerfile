@@ -50,7 +50,8 @@ FROM base AS deps
 WORKDIR /app
 
 # Copy package files for all workspaces
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+# .npmrc must be included so minimum-release-age / ignore-scripts are enforced
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json .npmrc ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 COPY shared/package.json shared/
@@ -181,7 +182,8 @@ RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \
 VOLUME /var/lib/postgresql/data /app/data
 
 # Copy package files
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# .npmrc must be included so minimum-release-age / ignore-scripts are enforced
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 COPY patches/ patches/
