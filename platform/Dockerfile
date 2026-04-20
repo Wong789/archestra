@@ -171,8 +171,8 @@ RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker
 #     chmod +x /usr/local/bin/kind
 
 RUN apk add --no-cache supervisor && \
-    # CVE-2026-24049: wheel path traversal fixed in >= 0.46.2
-    pip install --upgrade --break-system-packages wheel>=0.46.2
+    # CVE-2026-24049: wheel path traversal — not needed at runtime, remove entirely
+    pip uninstall -y wheel 2>/dev/null; rm -rf /usr/lib/python*/ensurepip
 
 # Create postgres directories (user already exists from postgresql package)
 RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \
