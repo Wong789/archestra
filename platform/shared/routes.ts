@@ -161,6 +161,8 @@ export const RouteId = {
   OpenAiChatCompletionsWithDefaultAgent:
     "openAiChatCompletionsWithDefaultAgent",
   OpenAiChatCompletionsWithAgent: "openAiChatCompletionsWithAgent",
+  UnifiedChatCompletions: "unifiedChatCompletions",
+  UnifiedChatCompletionsWithAgent: "unifiedChatCompletionsWithAgent",
 
   // Proxy Routes - Anthropic
   AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",
@@ -316,9 +318,6 @@ export const RouteId = {
 
   // MCP Settings Routes (organization-level)
   UpdateMcpSettings: "updateMcpSettings",
-
-  // Connection Settings Routes (organization-level)
-  UpdateConnectionSettings: "updateConnectionSettings",
 
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",
